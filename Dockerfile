@@ -14,6 +14,7 @@ RUN uv sync --frozen --no-dev --no-editable
 FROM build AS test
 RUN uv sync --frozen --no-editable
 COPY guard.yaml ./
+COPY scripts ./scripts
 COPY tests ./tests
 RUN uv run --frozen --no-sync pytest -q -p no:cacheprovider && touch /tmp/tests-passed
 
