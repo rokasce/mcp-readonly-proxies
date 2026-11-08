@@ -43,20 +43,13 @@ DOCS = [
         "Claude Code managed settings",
         "runbook",
     ),
-    ("rb-nexos", "docs/runbooks/nexos.md", "nexos.ai", "runbook"),
     ("rb-payhawk", "docs/runbooks/payhawk.md", "Payhawk", "runbook"),
     ("local-development", "docs/local-development.md", "Local development", "runbook"),
     ("configuration", "docs/configuration.md", "Configuration", "runbook"),
     ("deploy", "DEPLOY.md", "Deploy", "runbook"),
     ("nexos-setup", "docs/nexos-setup.md", "nexos.ai setup", "runbook"),
     ("security-model", "docs/security-model.md", "Security model", "runbook"),
-    ("open-questions", "docs/open-questions.md", "Open questions", "main"),
-    (
-        "questions-for-stakeholders",
-        "docs/questions-for-stakeholders.md",
-        "Questions for stakeholders",
-        "main",
-    ),
+    ("questions", "docs/questions.md", "Questions for leadership", "main"),
 ]
 PATH_TO_ID = {p: i for i, p, _, _ in DOCS}
 
@@ -373,20 +366,12 @@ def main() -> None:
             block = f'<section class="doc" id="{doc_id}"><h1>{title}</h1>{src_note}{body}</section>'
             sections_main.append((doc_id, block))
 
-    before = [
-        b for i, b in sections_main if i not in ("open-questions", "questions-for-stakeholders")
-    ]
-    after = [b for i, b in sections_main if i in ("open-questions", "questions-for-stakeholders")]
-    nav_main_items = [
-        n
-        for n in nav_main
-        if 'href="#open-questions"' not in n and 'href="#questions-for-stakeholders"' not in n
-    ]
-    nav_after = [
-        n
-        for n in nav_main
-        if 'href="#open-questions"' in n or 'href="#questions-for-stakeholders"' in n
-    ]
+    # The questions for leadership come last, after the runbooks.
+    last = {"questions"}
+    before = [b for i, b in sections_main if i not in last]
+    after = [b for i, b in sections_main if i in last]
+    nav_main_items = [n for n in nav_main if not any(f'href="#{i}"' in n for i in last)]
+    nav_after = [n for n in nav_main if any(f'href="#{i}"' in n for i in last)]
 
     page = f"""<!doctype html>
 <html lang="en">
