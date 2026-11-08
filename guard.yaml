@@ -1,0 +1,56 @@
+# Upstreams this guard can sit in front of. One guard process serves one upstream
+# (MCP_GUARD_UPSTREAM). Only tools listed under `allow` are shown to or callable by agents;
+# anything else, including tools the upstream adds later, stays blocked until added here.
+#
+# Every person signs in with Google and the guard calls the upstream with their own token.
+# google_scopes must be read-only (.readonly) scopes, and a token holding anything more is
+# refused, so Google itself refuses any change even if a tool were let through by mistake.
+upstreams:
+  # Default: Gmail through the GA Gmail REST API, with the guard's own read-only tools
+  # (same names as Google's Gmail MCP server). See README.md, "Gmail API or Gmail MCP".
+  gmail:
+    kind: gmail_api
+    url: https://gmail.googleapis.com
+    google_scopes:
+      - https://www.googleapis.com/auth/gmail.readonly
+    allow:
+      - search_threads
+      - get_thread
+      - get_message
+      - list_drafts
+      - get_draft
+      - list_labels
+    # Optional, these are the defaults: results over 1 MB are cut, and each person may make
+    # 2 requests per second with bursts of up to 20.
+    max_response_bytes: 1000000
+    rate_limit: {per_second: 2, burst: 20}
+
+  # Alternative: Google's own Gmail MCP server (Developer Preview). Switch with
+  # MCP_GUARD_UPSTREAM=gmail-mcp. The allowlist is the tools Gmail MCP marks read-only.
+  gmail-mcp:
+    kind: mcp
+    url: https://gmailmcp.googleapis.com/mcp/v1
+    google_scopes:
+      - https://www.googleapis.com/auth/gmail.readonly
+    allow:
+      - search_threads
+      - get_thread
+      - get_message
+      - list_drafts
+      - get_draft
+      - list_labels
+    # Optional: tool name -> sha256 of its definition. A pinned tool whose name, description or
+    # input schema changes upstream is dropped until reviewed; the warning in the log carries the
+    # new hash to pin after review.
+    # pins:
+    #   search_threads: <sha256>
+
+  # Not wired: Payhawk (https://mcp.payhawk.com/mcp). An `mcp` upstream gets the person's Google
+  # token, so it must be a googleapis.com server; Payhawk needs its own per-person upstream sign-in,
+  # which isn't built. Until then Claude can use Payhawk directly with its write tools blocked in
+  # the organisation's connector settings (docs/runbooks/payhawk.md).
+  # payhawk:
+  #   kind: mcp
+  #   url: https://mcp.payhawk.com/mcp
+  #   google_scopes: [...]
+  #   allow: [list_expenses, get_expense, list_cards]

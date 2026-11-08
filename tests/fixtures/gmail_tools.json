@@ -1,0 +1,234 @@
+{
+ "tools": [
+  {
+   "name": "create_draft",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Create draft email"
+   }
+  },
+  {
+   "name": "list_drafts",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "List draft emails"
+   }
+  },
+  {
+   "name": "get_draft",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get draft email"
+   }
+  },
+  {
+   "name": "get_thread",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get email thread"
+   }
+  },
+  {
+   "name": "get_message",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get email message"
+   }
+  },
+  {
+   "name": "search_threads",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Search email threads"
+   }
+  },
+  {
+   "name": "label_thread",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Add labels to thread"
+   }
+  },
+  {
+   "name": "unlabel_thread",
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Remove labels from thread"
+   }
+  },
+  {
+   "name": "apply_sensitive_thread_label",
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Apply sensitive label (Trash or Spam) to thread"
+   }
+  },
+  {
+   "name": "trash_thread",
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Move thread to Trash"
+   }
+  },
+  {
+   "name": "untrash_thread",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Remove thread from Trash"
+   }
+  },
+  {
+   "name": "mark_thread_spam",
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Mark thread as Spam"
+   }
+  },
+  {
+   "name": "unmark_thread_spam",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Unmark thread as Spam"
+   }
+  },
+  {
+   "name": "list_labels",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "List labels"
+   }
+  },
+  {
+   "name": "label_message",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Add labels to message"
+   }
+  },
+  {
+   "name": "update_message_labels",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Modify message labels"
+   }
+  },
+  {
+   "name": "unlabel_message",
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Remove labels from message"
+   }
+  },
+  {
+   "name": "apply_sensitive_message_label",
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Apply sensitive label (Trash or Spam) to message"
+   }
+  },
+  {
+   "name": "trash_message",
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Move message to Trash"
+   }
+  },
+  {
+   "name": "untrash_message",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Remove message from Trash"
+   }
+  },
+  {
+   "name": "mark_message_spam",
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Mark message as Spam"
+   }
+  },
+  {
+   "name": "unmark_message_spam",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Unmark message as Spam"
+   }
+  },
+  {
+   "name": "create_label",
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Create label"
+   }
+  }
+ ]
+}
