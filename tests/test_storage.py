@@ -41,9 +41,7 @@ async def test_default_key_is_derived_from_the_secret(tmp_path: Path) -> None:
     assert await build_storage(url, [], "client-secret-2").get("k") is None
 
 
-@pytest.mark.skipif(
-    not os.environ.get("GUARD_TEST_REDIS_URL"), reason="needs GUARD_TEST_REDIS_URL"
-)
+@pytest.mark.skipif(not os.environ.get("GUARD_TEST_REDIS_URL"), reason="needs GUARD_TEST_REDIS_URL")
 async def test_redis_is_shared_between_replicas() -> None:
     url = os.environ["GUARD_TEST_REDIS_URL"]
     first, second = build_storage(url, [NEW], "unused"), build_storage(url, [NEW], "unused")

@@ -36,7 +36,7 @@ refused the same way but not revoked, since it's the person's own.
 | Threat | Mitigation |
 |---|---|
 | Forwarding the client's credential upstream | Upstream calls carry only the person's Google token, no incoming headers. Tested |
-| Google tokens sent to a third party | `mcp` upstreams must be `*.googleapis.com` |
+| Google tokens sent to a third party | Every upstream must be `*.googleapis.com` (or a local address, for tests) |
 | Upstream tool changes | Optional [pins](configuration.md#pins); a changed tool is dropped and its new hash logged |
 | Lying `readOnlyHint` annotations | Only the allowlist decides, so a lying annotation can't add a tool |
 | Upstream resources and prompts | Never offered |
