@@ -249,9 +249,15 @@ OAuth Playground is only for this mode; a deployment runs its own sign-in (see
    <code>https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email</code>,
    authorize with your account, then "Exchange authorization code for tokens"; copy the access
    token (valid 1 hour).</li>
-<li><code>MCP_GUARD_UPSTREAM=gmail MCP_GUARD_ALLOWED_DOMAIN=example.com uv run mcp-guard --dev</code>
-   (leave out the domain for a personal Google account)</li>
-<li><code>claude mcp add --transport http gmail http://localhost:3000/mcp --header "Authorization: Bearer &lt;token&gt;"</code></li>
+<li>Check the guard with it in one go: <code>uv run python scripts/playground_check.py --domain example.com</code>
+   (leave out <code>--domain</code> for a personal Google account). It asks for the token without echoing it,
+   starts the guard in <code>--dev</code>, and checks that the token is accepted, the six tools work and
+   write tools are refused. Given a token with more access (add <code>gmail.modify</code> in step 1), it checks
+   the guard refuses it. The token goes only to Google and to the guard on 127.0.0.1; mail shows
+   up only as the subjects of your three most recent threads.</li>
+<li>Or run the guard and use it from Claude Code:
+   <code>MCP_GUARD_UPSTREAM=gmail MCP_GUARD_ALLOWED_DOMAIN=example.com uv run mcp-guard --dev</code>, then
+   <code>claude mcp add --transport http gmail http://localhost:3000/mcp --header "Authorization: Bearer &lt;token&gt;"</code></li>
 </ol>
 <p>To try the full deployed sign-in (Claude Code's OAuth flow, the personal-key page) without any
 Google OAuth client, run the guard against a fake Google:
@@ -270,7 +276,8 @@ an empty tool list, and every call upstream gives up after 60 s.</p>
 equal the tools Gmail MCP marks read-only, and that the guard's own Gmail API tools are exactly
 those; refresh the snapshot when Gmail changes its tools.</p>
 <h2 id="readme--status">Status</h2>
-<p>Runs locally, in <code>--dev</code> against real Google and with the full sign-in against a fake Google;
+<p>Runs locally, in <code>--dev</code> against real Google (<code>scripts/playground_check.py</code>) and with the full
+sign-in against a fake Google;
 tried end to end with Claude Code and with a personal key over Streamable HTTP. Not yet deployed
 or tried against real Google sign-in, which needs the Google OAuth client
 (<a href="#deploy">DEPLOY.md</a>). Payhawk isn't wired: an <code>mcp</code> upstream receives the person's Google
@@ -2321,6 +2328,10 @@ MCP_GUARD_TEST_REDIS_URL=redis://127.0.0.1:6390/0 uv run pytest -q
 <tr>
 <td><code>tests/test_storage.py</code></td>
 <td>Encryption at rest, key rotation, Redis</td>
+</tr>
+<tr>
+<td><code>tests/test_playground_check.py</code></td>
+<td><code>scripts/playground_check.py</code> (the README's check with a real OAuth Playground token), run against the fake Google</td>
 </tr>
 </tbody>
 </table></div>

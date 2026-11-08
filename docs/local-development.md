@@ -26,6 +26,7 @@ MCP_GUARD_TEST_REDIS_URL=redis://127.0.0.1:6390/0 uv run pytest -q
 | `tests/test_gmail_api.py` | The `gmail_api` tools against the fake Gmail API: results, GET only, id checks, errors |
 | `tests/test_e2e_http.py` | Over real HTTP: a Claude-Code-style OAuth sign-in through the consent page and the fake Google, broad grants refused, outsiders told, Gmail MCP proxied with only the Google token, personal keys end to end, two replicas on Redis |
 | `tests/test_storage.py` | Encryption at rest, key rotation, Redis |
+| `tests/test_playground_check.py` | `scripts/playground_check.py` (the README's check with a real OAuth Playground token), run against the fake Google |
 
 `tests/fakes/fake_google.py` fakes the Google endpoints the guard uses: OAuth (authorize, token
 with PKCE and client authentication, refresh, revoke), tokeninfo, userinfo, the Gmail REST API

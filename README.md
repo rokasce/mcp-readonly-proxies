@@ -90,9 +90,15 @@ OAuth Playground is only for this mode; a deployment runs its own sign-in (see
    `https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email`,
    authorize with your account, then "Exchange authorization code for tokens"; copy the access
    token (valid 1 hour).
-2. `MCP_GUARD_UPSTREAM=gmail MCP_GUARD_ALLOWED_DOMAIN=example.com uv run mcp-guard --dev`
-   (leave out the domain for a personal Google account)
-3. `claude mcp add --transport http gmail http://localhost:3000/mcp --header "Authorization: Bearer <token>"`
+2. Check the guard with it in one go: `uv run python scripts/playground_check.py --domain example.com`
+   (leave out `--domain` for a personal Google account). It asks for the token without echoing it,
+   starts the guard in `--dev`, and checks that the token is accepted, the six tools work and
+   write tools are refused. Given a token with more access (add `gmail.modify` in step 1), it checks
+   the guard refuses it. The token goes only to Google and to the guard on 127.0.0.1; mail shows
+   up only as the subjects of your three most recent threads.
+3. Or run the guard and use it from Claude Code:
+   `MCP_GUARD_UPSTREAM=gmail MCP_GUARD_ALLOWED_DOMAIN=example.com uv run mcp-guard --dev`, then
+   `claude mcp add --transport http gmail http://localhost:3000/mcp --header "Authorization: Bearer <token>"`
 
 To try the full deployed sign-in (Claude Code's OAuth flow, the personal-key page) without any
 Google OAuth client, run the guard against a fake Google:
@@ -118,7 +124,8 @@ those; refresh the snapshot when Gmail changes its tools.
 
 ## Status
 
-Runs locally, in `--dev` against real Google and with the full sign-in against a fake Google;
+Runs locally, in `--dev` against real Google (`scripts/playground_check.py`) and with the full
+sign-in against a fake Google;
 tried end to end with Claude Code and with a personal key over Streamable HTTP. Not yet deployed
 or tried against real Google sign-in, which needs the Google OAuth client
 ([DEPLOY.md](DEPLOY.md)). Payhawk isn't wired: an `mcp` upstream receives the person's Google

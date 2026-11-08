@@ -48,7 +48,7 @@ ignore = [
 "docs/site/build.py" = ["E501"] # embedded HTML, CSS and JS templates
 
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", "scripts"]
 strict = ["src"]
 pythonVersion = "3.12"
 venvPath = "."
