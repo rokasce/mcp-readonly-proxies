@@ -28,6 +28,7 @@ async def test_read_only_token_accepted_with_identity(google: Google) -> None:
     assert token.claims["email"] == "pat@example.com"
     assert token.claims["email_verified"] == "true"
     assert token.claims["google_user_data"]["hd"] == "example.com"
+    assert token.claims["client"] == "oauth"
 
 
 @pytest.mark.parametrize(
@@ -86,6 +87,7 @@ async def test_dev_token_read_only_accepted(google: Google) -> None:
     verified = await dev_auth(upstream(), endpoints=google.endpoints).verify_token(token)
     assert verified is not None
     assert verified.claims["email"] == "pat@example.com"
+    assert verified.claims["client"] == "dev"  # the audit line says the token was pasted in
 
 
 async def test_dev_token_from_oauth_playground_accepted(google: Google) -> None:

@@ -85,6 +85,7 @@ class ScopeLimitedTokenVerifier(TokenVerifier):
         required: list[str],
         client_id: str | None = None,
         revoke_refused: bool = False,
+        client: str = "oauth",
         endpoints: GoogleEndpoints = GOOGLE,
     ):
         super().__init__(required_scopes=[*required, *upstream_scopes])
@@ -92,6 +93,8 @@ class ScopeLimitedTokenVerifier(TokenVerifier):
         self._allowed = {*IDENTITY_SCOPES, "email", *upstream_scopes}
         self._client_id = client_id
         self._revoke_refused = revoke_refused
+        # How the token came in, for the audit line: "oauth" (the guard's sign-in) or "dev".
+        self._client = client
         self._endpoints = endpoints
         self._cache = TokenCache(ttl_seconds=VERIFY_CACHE_S)
 
@@ -151,6 +154,7 @@ class ScopeLimitedTokenVerifier(TokenVerifier):
                 "sub": sub,
                 "email": data.get("email"),
                 "email_verified": data.get("email_verified"),
+                "client": self._client,
             },
         )
 

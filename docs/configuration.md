@@ -94,7 +94,7 @@ After every tool call the guard writes one JSON object per line to stdout (logge
 | Field | Values |
 |---|---|
 | `person` | The signed-in person's Google email |
-| `client` | `oauth` (Claude and other MCP OAuth clients), `personal_key` (nexos.ai and other API-key clients) |
+| `client` | `oauth` (Claude and other MCP OAuth clients), `personal_key` (nexos.ai and other API-key clients), `dev` (a token pasted in local test mode) |
 | `decision` | `allow`, or `deny` when the call was refused or rate-limited |
 | `outcome` | `ok`; `error` (the upstream answered with an error, or couldn't be reached); `refused` (the tool isn't allowed, or its pinned definition changed); `rate_limited` |
 | `duration_ms` | How long the call took in the guard, upstream included |

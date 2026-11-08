@@ -407,7 +407,7 @@ async def test_audit_line_after_each_call(
     gmail_mcp: Upstream,
     fake_gmail: Any,
 ) -> None:
-    _signed_in(monkeypatch, **PAT)
+    _signed_in(monkeypatch, **PAT, client="oauth")
     caplog.set_level(logging.INFO, logger="mcp_guard.audit")
     async with Client(proxied(gmail_mcp, fake_gmail, allowed_domain="example.com")) as client:
         await client.call_tool("search_threads", {"id": "secret-query"})

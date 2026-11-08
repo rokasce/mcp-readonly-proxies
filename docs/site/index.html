@@ -276,8 +276,9 @@ an empty tool list, and every call upstream gives up after 60 s.</p>
 equal the tools Gmail MCP marks read-only, and that the guard's own Gmail API tools are exactly
 those; refresh the snapshot when Gmail changes its tools.</p>
 <h2 id="readme--status">Status</h2>
-<p>Runs locally, in <code>--dev</code> against real Google (<code>scripts/playground_check.py</code>) and with the full
-sign-in against a fake Google;
+<p>Runs locally, in <code>--dev</code> against real Google and Gmail (<code>scripts/playground_check.py</code> passed with
+a real OAuth Playground token: real mail read, write tools refused, a token without
+<code>gmail.readonly</code> refused) and with the full sign-in against a fake Google;
 tried end to end with Claude Code and with a personal key over Streamable HTTP. Not yet deployed
 or tried against real Google sign-in, which needs the Google OAuth client
 (<a href="#deploy">DEPLOY.md</a>). Payhawk isn't wired: an <code>mcp</code> upstream receives the person's Google
@@ -2531,7 +2532,7 @@ pins.</p>
 </tr>
 <tr>
 <td><code>client</code></td>
-<td><code>oauth</code> (Claude and other MCP OAuth clients), <code>personal_key</code> (nexos.ai and other API-key clients)</td>
+<td><code>oauth</code> (Claude and other MCP OAuth clients), <code>personal_key</code> (nexos.ai and other API-key clients), <code>dev</code> (a token pasted in local test mode)</td>
 </tr>
 <tr>
 <td><code>decision</code></td>
@@ -3028,8 +3029,13 @@ revocation of over-broad grants at sign-in; the domain and <code>hd</code> check
 as bearer or <code>X-API-Key</code>, replace, revoke, browser binding, hashed and encrypted at rest); a
 sign-in made on one replica used on another through Redis; no header forwarding to Gmail MCP;
 audit lines; pins; size cap; rate limit; the container image.</p>
-<p>Needs a real Google OAuth client and Workspace tenant: that Google's real tokeninfo, userinfo,
-refresh and revocation behave as the fake does (the fake follows Google's documented responses);
+<p>Verified against real Google in <code>--dev</code>, with an OAuth Playground token on a personal account:
+Google's real tokeninfo and userinfo work with the token check (a token without <code>gmail.readonly</code>
+was refused; a read-only one accepted), the Gmail API tools read real labels and threads, and the
+write tools were refused without reaching Gmail.</p>
+<p>Needs a real Google OAuth client and Workspace tenant: that Google's real refresh and revocation
+behave as the fake does (the fake follows Google's documented responses); the <code>hd</code> check on a real
+Workspace account;
 the Internal consent screen; behaviour when a Workspace admin sets the client to "Specific Google
 data"; real Gmail API responses for unusual messages. Needs Claude.ai: the custom connector's
 sign-in (its callback is allowed). Needs nexos.ai: the header it sends the key in, and its "Test

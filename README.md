@@ -124,8 +124,9 @@ those; refresh the snapshot when Gmail changes its tools.
 
 ## Status
 
-Runs locally, in `--dev` against real Google (`scripts/playground_check.py`) and with the full
-sign-in against a fake Google;
+Runs locally, in `--dev` against real Google and Gmail (`scripts/playground_check.py` passed with
+a real OAuth Playground token: real mail read, write tools refused, a token without
+`gmail.readonly` refused) and with the full sign-in against a fake Google;
 tried end to end with Claude Code and with a personal key over Streamable HTTP. Not yet deployed
 or tried against real Google sign-in, which needs the Google OAuth client
 ([DEPLOY.md](DEPLOY.md)). Payhawk isn't wired: an `mcp` upstream receives the person's Google

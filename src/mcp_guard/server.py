@@ -126,7 +126,7 @@ class Audit(Middleware):
                         "event": "tool_call",
                         "upstream": self._upstream_name,
                         "person": person.get("email") or "-",
-                        "client": person.get("client") or ("oauth" if person else "-"),
+                        "client": person.get("client") or "-",
                         "tool": context.message.name,
                         "decision": "deny" if outcome in ("refused", "rate_limited") else "allow",
                         "outcome": outcome,
@@ -286,7 +286,7 @@ def dev_auth(upstream: Upstream, *, endpoints: GoogleEndpoints = GOOGLE) -> Auth
     OAuth Playground), limited to read-only scopes. A refused token is the person's own, so it
     isn't revoked."""
     return ScopeLimitedTokenVerifier(
-        upstream.google_scopes, required=[EMAIL_SCOPE], endpoints=endpoints
+        upstream.google_scopes, required=[EMAIL_SCOPE], endpoints=endpoints, client="dev"
     )
 
 

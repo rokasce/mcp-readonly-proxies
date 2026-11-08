@@ -84,8 +84,14 @@ as bearer or `X-API-Key`, replace, revoke, browser binding, hashed and encrypted
 sign-in made on one replica used on another through Redis; no header forwarding to Gmail MCP;
 audit lines; pins; size cap; rate limit; the container image.
 
-Needs a real Google OAuth client and Workspace tenant: that Google's real tokeninfo, userinfo,
-refresh and revocation behave as the fake does (the fake follows Google's documented responses);
+Verified against real Google in `--dev`, with an OAuth Playground token on a personal account:
+Google's real tokeninfo and userinfo work with the token check (a token without `gmail.readonly`
+was refused; a read-only one accepted), the Gmail API tools read real labels and threads, and the
+write tools were refused without reaching Gmail.
+
+Needs a real Google OAuth client and Workspace tenant: that Google's real refresh and revocation
+behave as the fake does (the fake follows Google's documented responses); the `hd` check on a real
+Workspace account;
 the Internal consent screen; behaviour when a Workspace admin sets the client to "Specific Google
 data"; real Gmail API responses for unusual messages. Needs Claude.ai: the custom connector's
 sign-in (its callback is allowed). Needs nexos.ai: the header it sends the key in, and its "Test
