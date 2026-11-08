@@ -51,7 +51,8 @@ claude mcp add --transport http gmail-local http://localhost:3000/mcp
 claude            # then /mcp > gmail-local > Authenticate
 ```
 
-Choose Allow Access on the consent page. Claude Code sees six read-only tools; ask it to search
+See [Claude Code's MCP sign-in](https://code.claude.com/docs/en/mcp#authenticate-with-remote-mcp-servers). Choose Allow Access on the
+consent page. Claude Code sees six read-only tools; ask it to search
 for "invoice". Remove it with `claude mcp remove gmail-local`.
 
 ### With a personal key

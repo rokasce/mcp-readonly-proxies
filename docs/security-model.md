@@ -14,15 +14,16 @@ What the guard guarantees and what it doesn't. Research behind it: [findings.md]
 | 6. `guard.yaml` accepts only `.readonly` scopes | Guard, at startup | someone edits the config to ask for more |
 | 7. The OAuth client is limited to `gmail.readonly` in Workspace | Google, set by a Workspace admin | someone changes the guard's code |
 
-Layer 1 is the real guarantee: Google rejects any write made with the token. The sign-in asks for
+Layer 1 is the real guarantee: [Google rejects any write](https://developers.google.com/workspace/gmail/api/auth/scopes#restricted-scopes) made with the token. The sign-in asks for
 exactly `openid`, `userinfo.email` and `gmail.readonly`, and Google's tokeninfo confirms each token
 was issued to the guard's OAuth client with those scopes and no more. A token pasted in `--dev` is
 refused the same way but not revoked, since it's the person's own.
 
 ## Who gets in
 
-- **Only company Workspace accounts.** The Internal consent screen blocks others at Google, and the
-  guard requires a verified email in the allowed domain with a matching Workspace domain (`hd`).
+- **Only company Workspace accounts.** The [Internal consent screen](https://support.google.com/cloud/answer/15549945#user-type-internal) blocks others at Google, and the
+  guard requires a verified email in the allowed domain with a matching Workspace domain
+  ([`hd`](https://developers.google.com/identity/openid-connect/openid-connect#an-id-tokens-payload)).
   Without `hd`, a personal Google account made for `pat@example.com` would get in, and the
   company can't suspend or offboard it.
 - **Only Claude signs in with OAuth.** Clients may register only the callbacks in
@@ -38,21 +39,21 @@ refused the same way but not revoked, since it's the person's own.
 | Forwarding the client's credential upstream | Upstream calls carry only the person's Google token, no incoming headers. Tested |
 | Google tokens sent to a third party | Every upstream must be `*.googleapis.com` (or a local address, for tests) |
 | Upstream tool changes | Optional [pins](configuration.md#pins); a changed tool is dropped and its new hash logged |
-| Lying `readOnlyHint` annotations | Only the allowlist decides, so a lying annotation can't add a tool |
+| [Lying `readOnlyHint` annotations](https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool) | Only the allowlist decides, so a lying annotation can't add a tool |
 | Upstream resources and prompts | Never offered |
 | Stolen personal key | 256-bit, stored hashed, expires in 180 days, revocable, reads only its owner's mail |
 | Stolen storage | Everything is Fernet-encrypted; personal keys and the guard's refresh tokens are stored only as hashes |
 | Login CSRF on `/keys` | PKCE, plus a 10-minute `state` tied to the browser by an HttpOnly cookie |
 | DNS rebinding on a local `--dev` guard | Host and Origin checked on localhost (421 otherwise) |
 | One agent using up the shared Gmail quota | Per-person rate limit (2/s, bursts of 20) |
-| Oversized responses | Results cut at 1 MB, bodies at 20,000 characters |
+| Oversized responses | Results cut at 1 MB; bodies returned 20,000 characters at a time; attachment contents never read |
 | Mail leaking into logs | The [audit line](configuration.md#audit-log) never holds arguments, results or tokens |
 
 ## Not covered
 
 - **Prompt injection in mail.** Mail is untrusted input. It can't make the guard send anything, but
-  it can steer the model's other tools in the same chat. Screening responses (like Google's Model
-  Armor) is a possible follow-up.
+  it can steer the model's other tools in the same chat. Screening responses (like Google's [Model
+  Armor](https://developers.google.com/workspace/guides/configure-mcp-security#model-armor)) is a possible follow-up.
 - **Argument checks.** The allowlist is by name only; enough while every allowed tool is read-only.
 - **Payhawk.** Not wired; it needs its own per-person sign-in ([payhawk.md](runbooks/payhawk.md)).
 - **Revoking a key doesn't revoke at Google.** It deletes the stored Google token; revoking the grant

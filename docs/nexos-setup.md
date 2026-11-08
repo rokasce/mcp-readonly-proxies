@@ -4,6 +4,12 @@ nexos.ai can only turn whole integrations on or off, not single tools. So read-o
 means: built-in Gmail **off**, and the guard added as a **custom MCP**, with each user's own
 personal key. Background: [findings.md](findings.md).
 
+**Why personal keys:** nexos's custom MCP authenticates each user with their own API key ("Each
+user will be able to provide their own API key individually once the server is connected",
+[nexos docs](https://docs.nexos.ai/workspace/integrations/custom-mcp#add-the-custom-mcp-to-nexos.ai)); it documents no OAuth
+sign-in. A personal key is that API key: the guard issues it to one person, and it reads only that
+person's mailbox. Not yet tried against real nexos (see [Not verified yet](#not-verified-yet)).
+
 **Before you start:** the guard is deployed with `MCP_GUARD_PERSONAL_KEYS=true` at
 `https://gmail-guard.example.com`, and `https://gmail-guard.example.com/keys/callback` is in the
 Google OAuth client's redirect URIs ([DEPLOY.md](../DEPLOY.md)). The same deployment keeps serving
@@ -11,12 +17,12 @@ Claude.
 
 ## Organization setup [nexos Owner]
 
-1. **Turn off built-in Gmail:** Settings > Organization > Integrations (or Management > Apps) >
-   Gmail > **Inactive**. Its tools and scopes are undocumented.
+1. **Turn off built-in Gmail:** [Settings > Organization > Integrations](https://docs.nexos.ai/workspace/integrations#activate-or-deactivate-an-integration) (or Management > Apps) >
+   Gmail > **Inactive**. Its tools and scopes are [undocumented](https://docs.nexos.ai/workspace/integrations/gmail).
 2. **Block nexos's Gmail app at Google [GWA]:** a Workspace admin sets it to **Blocked** (or
    Specific Google data) under Accessed apps, so nobody gets write access through it
    ([google-workspace-admin.md](runbooks/google-workspace-admin.md)).
-3. **Add the custom MCP:** Management > Apps > **Add custom MCP**:
+3. **Add the custom MCP:** [Management > Apps > **Add custom MCP**](https://docs.nexos.ai/workspace/integrations/custom-mcp#add-the-custom-mcp-to-nexos.ai):
    - Server name: `Gmail (read-only)`
    - Server URL: `https://gmail-guard.example.com/mcp`
    - Authentication: API key, provided by each user individually
@@ -26,10 +32,10 @@ Claude.
    who haven't added theirs; if it does, every member would read your mailbox. Use a key from a
    throwaway account in the domain, revoke it afterwards, and confirm that members without a key
    get no access.
-5. Optional: ask nexos for its egress IPs and limit who can reach the guard (keep your users and
+5. Optional: [ask nexos for its egress IPs](https://docs.nexos.ai/workspace/integrations/custom-mcp#use-the-custom-mcp) and limit who can reach the guard (keep your users and
    Claude.ai, if used).
 
-A custom MCP is organization-wide: every team and member can use it once enabled. Each member
+A custom MCP is [organization-wide](https://docs.nexos.ai/workspace/integrations/custom-mcp#faq): every team and member can use it once enabled. Each member
 still needs their own key, and a key reads only its owner's mailbox.
 
 ## Per-user setup [each user]
@@ -38,7 +44,7 @@ still needs their own key, and a key reads only its owner's mailbox.
    accounts in your Workspace domain work, and Google asks only for read access to Gmail.
 2. Copy the key. It starts with `mcpg_`, is shown once, and is valid for 180 days.
 3. In nexos, open the "Gmail (read-only)" app and paste the key as your API key.
-4. Turn it on in a chat (Tools panel) or an agent (Agent Settings > Integrations).
+4. Turn it on in a chat (Tools panel) or an agent (Agent Settings > Integrations) ([nexos docs](https://docs.nexos.ai/workspace/integrations#where-you-can-use-integrations)).
 
 One key per person: making a new key replaces the old one, which is also the fix for a lost key.
 We don't know which header nexos sends the key in, so the guard accepts both
@@ -48,7 +54,7 @@ We don't know which header nexos sends the key in, so the guard accepts both
 
 Six read-only tools: `search_threads`, `get_thread`, `get_message`, `list_labels`, `list_drafts`
 and `get_draft`. Nothing can send, draft, label, archive or delete, and the Google token behind
-them can't either.
+them can't either. Attachments show up by name, type and size only; their contents can't be read.
 
 ## Revoking access
 
@@ -60,17 +66,17 @@ them can't either.
 
 ## What nexos can't do
 
-- **No per-tool or per-team control.** Integrations are Active or Inactive for the whole
-  organization; Team Owners don't manage apps.
+- **No per-tool or per-team control.** Integrations are [Active or Inactive](https://docs.nexos.ai/workspace/integrations#activate-or-deactivate-an-integration) for the whole
+  organization; Team Owners [don't manage apps](https://docs.nexos.ai/workspace/settings/organization/roles-and-permissions#team-owner).
 - **Approvals (HITL) are advisory.** An agent pauses before actions that change something, but any
-  user can pick "Always approve", and read-only actions run without asking. nexos doesn't document
+  user can pick ["Always approve"](https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals#what-you-can-do), and [read-only actions run without asking](https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals#what-users-need-to-know). nexos doesn't document
   how it tells read from write. The guard's tools carry `readOnlyHint: true`, so they should count
   as read-only. Don't rely on HITL as the read-only control.
 - **No OAuth for custom MCP** is documented, hence personal keys.
-- **Claude Code through the nexos gateway** (`ANTHROPIC_BASE_URL=https://api.nexos.ai`) gets no
-  claude.ai connectors or server-managed settings; only MDM or file-deployed managed settings
+- **Claude Code through the [nexos gateway](https://docs.nexos.ai/gateway-api/integrations/claude-code#id-2.-connect-claude-code-to-nexos.ai)** (`ANTHROPIC_BASE_URL=https://api.nexos.ai`) gets no
+  [claude.ai connectors](https://code.claude.com/docs/en/mcp#use-mcp-servers-from-claude-ai) or [server-managed settings](https://code.claude.com/docs/en/server-managed-settings#platform-availability); only MDM or file-deployed managed settings
   govern it ([claude-code-managed-settings.md](runbooks/claude-code-managed-settings.md)).
-- **Payhawk** doesn't allow sign-in from nexos today ([payhawk.md](runbooks/payhawk.md)).
+- **Payhawk** [doesn't allow sign-in from nexos](https://payhawk.com/help/connecting-payhawk-mcp#supported-ai-assistants) today ([payhawk.md](runbooks/payhawk.md)).
 
 Worth asking nexos: OAuth for custom MCP (no keys needed then), its egress IPs, and whether any
 control depends on the plan.

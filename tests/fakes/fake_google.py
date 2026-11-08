@@ -174,6 +174,11 @@ class FakeGoogle:
     grant_scopes: list[str] | None = None
     # How long access tokens last; Google's is an hour.
     access_lifetime_s: int = 3599
+    # Answers the next Gmail API requests get instead of their result, one per request:
+    # (status, Retry-After header or None, error reason or None).
+    gmail_failures: list[tuple[int, str | None, str | None]] = field(
+        default_factory=list[tuple[int, str | None, str | None]]
+    )
     # Status userinfo answers with instead of the profile (simulate an outage).
     userinfo_failure: int | None = None
     mailbox: dict[str, list[dict[str, Any]]] = field(default_factory=default_mailbox)
@@ -341,6 +346,11 @@ class FakeGoogle:
             return JSONResponse({"error": {"code": 401}}, status_code=401)
         if GMAIL_READONLY not in grant.scopes:
             return JSONResponse({"error": {"code": 403}}, status_code=403)
+        if self.gmail_failures:
+            status, retry_after, reason = self.gmail_failures.pop(0)
+            error = {"code": status, "errors": [{"reason": reason}] if reason else []}
+            headers = {"Retry-After": retry_after} if retry_after else None
+            return JSONResponse({"error": error}, status_code=status, headers=headers)
         return self._gmail_get(path, request)
 
     def _gmail_get(self, path: str, request: Request) -> Response:

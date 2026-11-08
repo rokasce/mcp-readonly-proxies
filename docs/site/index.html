@@ -115,10 +115,13 @@ Agents connect to the guard instead of Gmail and see only the read-only tools al
 <ul>
 <li><strong>Own mailbox only.</strong> Each person signs in with Google through the guard, which calls Gmail with
   their own token.</li>
-<li><strong>Read-only at Google.</strong> Sign-in asks only for <code>gmail.readonly</code>. A token holding more
+<li><strong>Read-only at Google.</strong> Sign-in asks only for
+  <a href="https://developers.google.com/workspace/gmail/api/auth/scopes#restricted-scopes" target="_blank" rel="noopener"><code>gmail.readonly</code></a>. A token holding more
   (<code>gmail.modify</code>, <code>https://mail.google.com/</code>, ...) is refused and revoked, so Google refuses
   changes even if a tool were allowed by mistake.</li>
 <li><strong>One company.</strong> Only verified accounts of the company's Workspace domain get through.</li>
+<li><strong>No attachments.</strong> The guard lists each attachment's name, type and size, but never reads
+  its contents. A long body is returned in parts (<code>body_offset</code>), 20,000 characters at a time.</li>
 <li><strong>Audit.</strong> One JSON line per tool call: who, which tool, allowed or not, outcome, duration.
   Arguments and mail are never logged.</li>
 <li><strong>Allowed tools:</strong> <code>search_threads</code>, <code>get_thread</code>, <code>get_message</code>, <code>list_drafts</code>, <code>get_draft</code>,
@@ -149,18 +152,19 @@ person makes a personal API key on the guard's <code>/keys</code> page (<a href=
 </tr>
 </tbody>
 </table></div>
-<p><strong>Use the Gmail API for now.</strong> Gmail MCP needs preview enrolment, runs under preview terms, and
-Google asks for prompt-injection screening (e.g. Model Armor) in front of it. Both use the same
+<p><strong>Use the Gmail API for now.</strong> Gmail MCP needs <a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#prerequisites" target="_blank" rel="noopener">preview enrolment</a>, runs under preview terms, and
+Google asks for <a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#prompt-injection" target="_blank" rel="noopener">prompt-injection screening</a> (e.g. Model Armor) in front of it. Both use the same
 <code>gmail.readonly</code> token and tool names, so agents see no difference.</p>
 <p><strong>To switch</strong> once Gmail MCP is generally available, set <code>MCP_GUARD_UPSTREAM=gmail-mcp</code> and do
 this on the Google side:</p>
 <ol>
-<li>Enable the Gmail MCP API (<code>gmailmcp.googleapis.com</code>) in the OAuth client's Cloud project.</li>
-<li>Tick <strong>Use this client for an AI-powered agent</strong> on the OAuth client (Google Auth Platform &gt;
-   Clients). If the client can't take it, create a new one and update the client ID and secret.</li>
+<li><a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#enable-mcp-services" target="_blank" rel="noopener">Enable the Gmail MCP API</a> (<code>gmailmcp.googleapis.com</code>) in the OAuth client's Cloud project.</li>
+<li>Tick <a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#configure-mcp-client" target="_blank" rel="noopener"><strong>Use this client for an AI-powered agent</strong></a> on the OAuth client (Google Auth
+   Platform &gt; Clients). If the client can't take it, <a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#rejected-requests" target="_blank" rel="noopener">create a new one</a> and update the client
+   ID and secret.</li>
 <li>Check Google's terms then. In preview: enrolment, and screening prompts and responses for
    prompt injection (Model Armor or your own documented solution).</li>
-<li>Compare the live <code>tools/list</code> with the allowlist. Google's public reference lists fewer tools
+<li>Compare the live <code>tools/list</code> with the allowlist. Google's <a href="https://developers.google.com/workspace/gmail/api/reference/mcp#mcp-tools" target="_blank" rel="noopener">public reference</a> lists fewer tools
    than <code>tests/fixtures/gmail_tools.json</code> (<code>get_draft</code> is missing).</li>
 <li>Pin the tool definitions (<a href="#configuration--pins"><code>pins</code></a>) so a changed tool is dropped
    until reviewed.</li>
@@ -189,7 +193,7 @@ this on the Google side:</p>
 </tr>
 <tr>
 <td><code>MCP_GUARD_ALLOWED_DOMAIN</code></td>
-<td>e.g. <code>example.com</code>; must equal the account's Google <code>hd</code> claim</td>
+<td>e.g. <code>example.com</code>; must equal the account's Google <a href="https://developers.google.com/identity/openid-connect/openid-connect#an-id-tokens-payload" target="_blank" rel="noopener"><code>hd</code> claim</a></td>
 </tr>
 <tr>
 <td><code>MCP_GUARD_JWT_SIGNING_KEY</code></td>
@@ -197,7 +201,7 @@ this on the Google side:</p>
 </tr>
 <tr>
 <td><code>MCP_GUARD_CLIENT_REDIRECT_URIS</code></td>
-<td>Comma-separated callbacks MCP clients may register; replaces the default, which is Claude only (<code>https://claude.ai/api/mcp/auth_callback</code>, <code>https://claude.com/api/mcp/auth_callback</code>, <code>http://localhost:*/callback</code>, <code>http://127.0.0.1:*/callback</code>)</td>
+<td>Comma-separated callbacks MCP clients may register; replaces the default, which is <a href="https://claude.com/docs/connectors/building/authentication#callback-urls" target="_blank" rel="noopener">Claude only</a> (<code>https://claude.ai/api/mcp/auth_callback</code>, <code>https://claude.com/api/mcp/auth_callback</code> (not in Anthropic's docs; kept from the draft in case Claude moves to claude.com), <code>http://localhost:*/callback</code>, <code>http://127.0.0.1:*/callback</code>)</td>
 </tr>
 <tr>
 <td><code>MCP_GUARD_PERSONAL_KEYS</code></td>
@@ -266,14 +270,14 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <h2 id="readme--research">Research</h2>
 <p>How to restrict MCP tools in Claude and nexos.ai (checked 2026-11-08):</p>
 <ul>
-<li><strong>Claude Team and Enterprise:</strong> an Owner can block the built-in Gmail connector's write tools
-  on every Claude surface. But its Google grant can still send (<code>gmail.compose</code>), so read-only
+<li><strong>Claude Team and Enterprise:</strong> an Owner can <a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9fa8289074" target="_blank" rel="noopener">block the built-in Gmail connector's write tools</a>
+  on every Claude surface. But its Google grant <a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors#h_60ffa285c8" target="_blank" rel="noopener">can still send</a> (<code>gmail.compose</code>), so read-only
   rests on Anthropic's policy, not the credential.</li>
 <li><strong>A credential-level guarantee</strong> needs a token with only <code>gmail.readonly</code>, so an OAuth client
-  you own (this guard), with the Workspace admin blocking Anthropic's "Claude for Gmail" app.</li>
-<li><strong>On Team</strong>, a member's personal Claude account can still connect work Gmail until "Claude for
+  you own (this guard), with the Workspace admin <a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#trustorlimit" target="_blank" rel="noopener">blocking</a> Anthropic's "Claude for Gmail" app.</li>
+<li><strong>On Team</strong>, a member's personal Claude account <a href="https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise#h_154f8902a3" target="_blank" rel="noopener">can still connect work Gmail</a> until "Claude for
   Gmail" is blocked at Google. Our plan is believed to be Team, pending confirmation.</li>
-<li><strong>nexos.ai</strong> can only turn an integration on or off, so read-only Gmail needs a custom MCP like
+<li><strong>nexos.ai</strong> can only <a href="https://docs.nexos.ai/workspace/integrations#activate-or-deactivate-an-integration" target="_blank" rel="noopener">turn an integration on or off</a>, so read-only Gmail needs a custom MCP like
   this guard.</li>
 </ul>
 <p>Full research, the options compared and the evidence: <a href="#findings">docs/findings.md</a>.</p>
@@ -352,7 +356,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <tr>
 <td><strong>nexos.ai</strong></td>
 <td>Built-in Gmail integration <strong>Inactive</strong>. MCP Guard added as a custom MCP, each user with a personal key</td>
-<td>Not possible today: Payhawk accepts sign-ins only from listed apps, and nexos is not one</td>
+<td>Not possible today: Payhawk <a href="https://payhawk.com/help/connecting-payhawk-mcp#supported-ai-assistants" target="_blank" rel="noopener">accepts sign-ins only from listed apps</a>, and nexos is not one</td>
 </tr>
 </tbody>
 </table></div>
@@ -363,7 +367,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <li>If the team accepts that, it is a valid no-code option (<a href="#findings--82-lighter-option-built-in-connector-anthropic-enforced-read-only">8.2</a>).</li>
 </ul>
 <p><strong>Team vs Enterprise:</strong> both have the org-wide Blocked policy. Enterprise adds custom roles and a verified-domain restriction that keeps personal Claude accounts off work Gmail. On Team (our believed plan), only the Google admin blocking "Claude for Gmail" closes that gap.</p>
-<p><strong>nexos.ai</strong> can only switch a whole integration on or off. No per-tool limits; approvals are advisory.</p>
+<p><strong>nexos.ai</strong> can only <a href="https://docs.nexos.ai/workspace/integrations#activate-or-deactivate-an-integration" target="_blank" rel="noopener">switch a whole integration on or off</a>. No per-tool limits; approvals are <a href="https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals#what-you-can-do" target="_blank" rel="noopener">advisory</a>.</p>
 <p>Decisions still open: <a href="#questions">questions.md</a>.</p>
 <h2 id="findings--2-all-options-compared">2. All options compared</h2>
 <p>"Enforced" means a technical control rejects the action. "Advisory" means it relies on a person clicking correctly, or on a hint. "Bypass" asks whether a normal member can get around it.</p>
@@ -387,7 +391,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td><strong>Yes, by Anthropic's servers.</strong> The Google token can still send</td>
 <td>No. Escapes: a personal Claude account (Team), other apps with Gmail access</td>
 <td>Low</td>
-<td><a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities" target="_blank" rel="noopener">Use connectors</a>, <a href="https://code.claude.com/docs/en/mcp.md#organization-controls-on-connector-tools" target="_blank" rel="noopener">Claude Code MCP</a></td>
+<td><a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9fa8289074" target="_blank" rel="noopener">Use connectors</a>, <a href="https://code.claude.com/docs/en/mcp#organization-controls-on-connector-tools" target="_blank" rel="noopener">Claude Code MCP</a></td>
 </tr>
 <tr>
 <td>2</td>
@@ -396,7 +400,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Yes, server-side, under the org policy</td>
 <td>No</td>
 <td>Low-Med</td>
-<td><a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans" target="_blank" rel="noopener">Custom roles</a></td>
+<td><a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans#h_979e558d00" target="_blank" rel="noopener">Custom roles</a></td>
 </tr>
 <tr>
 <td>3</td>
@@ -405,7 +409,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Advisory. Research mode skips approval; reported skipped in Claude Code</td>
 <td>Member approves</td>
 <td>Low</td>
-<td><a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp" target="_blank" rel="noopener">Custom connectors</a>, <a href="https://github.com/anthropics/claude-code/issues/89304" target="_blank" rel="noopener">#89304</a></td>
+<td><a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp#h_2d88678c54" target="_blank" rel="noopener">Custom connectors</a>, <a href="https://github.com/anthropics/claude-code/issues/89304" target="_blank" rel="noopener">#89304</a></td>
 </tr>
 <tr>
 <td>4</td>
@@ -414,7 +418,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Advisory</td>
 <td>Yes</td>
 <td>None</td>
-<td><a href="https://claude.com/docs/connectors/getting-started.md" target="_blank" rel="noopener">Getting started</a></td>
+<td><a href="https://claude.com/docs/connectors/getting-started#manage-or-disconnect-a-connector" target="_blank" rel="noopener">Getting started</a></td>
 </tr>
 <tr>
 <td>5</td>
@@ -423,7 +427,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Yes, by the client</td>
 <td>With MDM, no. Server-managed only: yes, via an API key or gateway. Don't match in Desktop local sessions (#92787)</td>
 <td>Low</td>
-<td><a href="https://code.claude.com/docs/en/permissions.md" target="_blank" rel="noopener">Permissions</a>, <a href="https://code.claude.com/docs/en/server-managed-settings.md" target="_blank" rel="noopener">Server-managed settings</a></td>
+<td><a href="https://code.claude.com/docs/en/permissions#settings-precedence" target="_blank" rel="noopener">Permissions</a>, <a href="https://code.claude.com/docs/en/server-managed-settings#security-considerations" target="_blank" rel="noopener">Server-managed settings</a></td>
 </tr>
 <tr>
 <td>6</td>
@@ -432,7 +436,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Yes, by the client</td>
 <td>As row 5</td>
 <td>Low</td>
-<td><a href="https://code.claude.com/docs/en/managed-mcp.md" target="_blank" rel="noopener">Managed MCP</a></td>
+<td><a href="https://code.claude.com/docs/en/managed-mcp#policy-based-control-with-allowlists-and-denylists" target="_blank" rel="noopener">Managed MCP</a></td>
 </tr>
 <tr>
 <td>7</td>
@@ -441,7 +445,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Yes, by the client</td>
 <td>With MDM, no</td>
 <td>Med</td>
-<td><a href="https://code.claude.com/docs/en/permissions.md#extend-permissions-with-hooks" target="_blank" rel="noopener">Hooks</a>, <a href="https://code.claude.com/docs/en/settings-reference.md" target="_blank" rel="noopener">Settings</a></td>
+<td><a href="https://code.claude.com/docs/en/permissions#extend-permissions-with-hooks" target="_blank" rel="noopener">Hooks</a>, <a href="https://code.claude.com/docs/en/settings-reference#allowmanagedhooksonly" target="_blank" rel="noopener">Settings</a></td>
 </tr>
 <tr>
 <td>8</td>
@@ -450,16 +454,16 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Yes, by the client</td>
 <td>With MDM, no</td>
 <td>Low</td>
-<td><a href="https://support.claude.com/en/articles/12622667-enterprise-configuration-for-claude-desktop" target="_blank" rel="noopener">Desktop config</a>, <a href="https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop" target="_blank" rel="noopener">Local MCP</a></td>
+<td><a href="https://support.claude.com/en/articles/12622667-enterprise-configuration-for-claude-desktop#h_003283c7cb" target="_blank" rel="noopener">Desktop config</a>, <a href="https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop#h_17d0fb22f8" target="_blank" rel="noopener">Local MCP</a></td>
 </tr>
 <tr>
 <td>9</td>
-<td>Claude API <code>mcp_toolset</code> allowlist; Agent SDK <code>allowed_tools</code> / <code>canUseTool</code></td>
+<td>Claude API <code>mcp_toolset</code> allowlist; Agent SDK <code>disallowed_tools</code> / <code>canUseTool</code> (<code>allowed_tools</code> alone doesn't block other tools)</td>
 <td>API, Agent SDK</td>
 <td>Yes, by the API and your code</td>
 <td>Developer-controlled</td>
 <td>Low</td>
-<td><a href="https://platform.claude.com/docs/en/agents-and-tools/mcp-connector.md" target="_blank" rel="noopener">MCP connector</a>, <a href="https://code.claude.com/docs/en/agent-sdk/permissions.md" target="_blank" rel="noopener">SDK permissions</a></td>
+<td><a href="https://platform.claude.com/docs/en/agents-and-tools/mcp-connector#allowlist-enable-only-specific-tools" target="_blank" rel="noopener">MCP connector</a>, <a href="https://code.claude.com/docs/en/agent-sdk/permissions#allow-and-deny-rules" target="_blank" rel="noopener">SDK permissions</a></td>
 </tr>
 <tr>
 <td>10</td>
@@ -468,7 +472,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Yes, whole integration only</td>
 <td>No</td>
 <td>Low</td>
-<td><a href="https://docs.nexos.ai/workspace/integrations.md" target="_blank" rel="noopener">Integrations</a></td>
+<td><a href="https://docs.nexos.ai/workspace/integrations#activate-or-deactivate-an-integration" target="_blank" rel="noopener">Integrations</a></td>
 </tr>
 <tr>
 <td>11</td>
@@ -477,7 +481,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Advisory</td>
 <td>Yes ("Always approve")</td>
 <td>Low</td>
-<td><a href="https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals.md" target="_blank" rel="noopener">HITL</a></td>
+<td><a href="https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals#what-you-can-do" target="_blank" rel="noopener">HITL</a></td>
 </tr>
 <tr>
 <td>12</td>
@@ -486,7 +490,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td><strong>Hard: Google rejects writes</strong></td>
 <td>No</td>
 <td>Med</td>
-<td><a href="https://developers.google.com/workspace/gmail/api/auth/scopes" target="_blank" rel="noopener">Gmail scopes</a></td>
+<td><a href="https://developers.google.com/workspace/gmail/api/auth/scopes#restricted-scopes" target="_blank" rel="noopener">Gmail scopes</a></td>
 </tr>
 <tr>
 <td>13</td>
@@ -495,7 +499,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td><strong>Hard (Google)</strong></td>
 <td>No</td>
 <td>Low</td>
-<td><a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data" target="_blank" rel="noopener">App access</a></td>
+<td><a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#trustorlimit" target="_blank" rel="noopener">App access</a></td>
 </tr>
 <tr>
 <td>14</td>
@@ -504,7 +508,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Hard scope floor, but can impersonate any user</td>
 <td>No</td>
 <td>Med</td>
-<td><a href="https://support.google.com/a/answer/162106" target="_blank" rel="noopener">DWD</a></td>
+<td><a href="https://knowledge.workspace.google.com/admin/apps/control-api-access-with-domain-wide-delegation#before-you-begin" target="_blank" rel="noopener">DWD</a></td>
 </tr>
 <tr>
 <td>15</td>
@@ -513,7 +517,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Hard <strong>if</strong> the token is readonly-only (untested)</td>
 <td>No</td>
 <td>Med</td>
-<td><a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server" target="_blank" rel="noopener">Gmail MCP</a></td>
+<td><a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#claude" target="_blank" rel="noopener">Gmail MCP</a></td>
 </tr>
 <tr>
 <td>16</td>
@@ -531,7 +535,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Advisory: the spec says treat them as untrusted</td>
 <td>n/a</td>
 <td>None</td>
-<td><a href="https://modelcontextprotocol.io/specification/2026-07-28/server/tools.md" target="_blank" rel="noopener">MCP spec</a></td>
+<td><a href="https://modelcontextprotocol.io/specification/2026-07-28/server/tools#:~:text=clients%20MUST%20consider%20tool%20annotations%20to%20be%20untrusted" target="_blank" rel="noopener">MCP spec</a></td>
 </tr>
 <tr>
 <td>18</td>
@@ -540,7 +544,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Yes, at the gateway; scope floor if it requests only <code>gmail.readonly</code></td>
 <td>No</td>
 <td>Med (no code)</td>
-<td><a href="https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/" target="_blank" rel="noopener">MCP portals</a></td>
+<td><a href="https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/#use-an-allowlist-pattern" target="_blank" rel="noopener">MCP portals</a>, <a href="https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/#portal-callback-url" target="_blank" rel="noopener">per-user OAuth</a></td>
 </tr>
 <tr>
 <td>19</td>
@@ -558,20 +562,20 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <h3 id="findings--31-what-the-connector-exposes">3.1 What the connector exposes</h3>
 <p>Anthropic's docs disagree:</p>
 <ul>
-<li>The help article <a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors" target="_blank" rel="noopener">Use Google Workspace connectors</a> lists search and read, drafts, <strong>send, reply and forward</strong>, and label and thread management.</li>
-<li>The <a href="https://claude.com/docs/connectors/google/gmail.md" target="_blank" rel="noopener">Claude docs Gmail page</a> says: "Claude reads and searches email only; it can't create, send, or modify messages."</li>
+<li>The help article <a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors#h_313efcfd44" target="_blank" rel="noopener">Use Google Workspace connectors</a> lists search and read, drafts, <strong>send, reply and forward</strong>, and label and thread management.</li>
+<li>The <a href="https://claude.com/docs/connectors/google/gmail#:~:text=Claude%20reads%20and%20searches%20email%20only" target="_blank" rel="noopener">Claude docs Gmail page</a> says: "Claude reads and searches email only; it can't create, send, or modify messages."</li>
 </ul>
 <p>The help article matches the community reports below, so treat the connector as <strong>able to write</strong>.</p>
-<figure><a href="../images/anthropic-gmail-capabilities.png" target="_blank" rel="noopener"><img src="../images/anthropic-gmail-capabilities.png" alt="The help article lists send, reply, forward and label management" width="1400" height="724" style="aspect-ratio:1400/724" loading="lazy"></a><figcaption>Source: <a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors" target="_blank" rel="noopener">Anthropic Help Center</a>.</figcaption></figure>
+<figure><a href="../images/anthropic-gmail-capabilities.png" target="_blank" rel="noopener"><img src="../images/anthropic-gmail-capabilities.png" alt="The help article lists send, reply, forward and label management" width="1400" height="724" style="aspect-ratio:1400/724" loading="lazy"></a><figcaption>Source: <a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors#h_313efcfd44" target="_blank" rel="noopener">Anthropic Help Center</a>.</figcaption></figure>
 <p>Anthropic publishes no tool list. GitHub issues (<a href="https://github.com/anthropics/claude-code/issues/89304" target="_blank" rel="noopener">#89304</a>, <a href="https://github.com/anthropics/claude-code/issues/72052" target="_blank" rel="noopener">#72052</a>, <a href="https://github.com/anthropics/claude-code/issues/47383" target="_blank" rel="noopener">#47383</a>) show <code>send_message</code>, <code>reply</code>, <code>forward</code>, <code>create_draft</code>, <code>update_draft</code>, <code>trash_message</code>, <code>trash_thread</code>, <code>mark_message_spam</code>, <code>mark_thread_spam</code> and label tools. One user reports <code>send_message</code> succeeded from Claude Code. <strong>Community.</strong></p>
 <h3 id="findings--32-which-oauth-scopes-it-gets">3.2 Which OAuth scopes it gets</h3>
 <ul>
-<li><strong>Verified:</strong> "Google's OAuth screen mentions email sending permissions" (<a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors" target="_blank" rel="noopener">10166901</a>).</li>
+<li><strong>Verified:</strong> "Google's OAuth screen mentions email sending permissions" (<a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors#h_60ffa285c8" target="_blank" rel="noopener">10166901</a>).</li>
 <li><strong>Community:</strong> users' Google permissions pages show "Claude for Gmail" with "Manage drafts and send emails" and "View your email messages and settings" (<a href="https://github.com/anthropics/claude-code/issues/46206" target="_blank" rel="noopener">#46206</a>, <a href="https://github.com/anthropics/claude-code/issues/55271" target="_blank" rel="noopener">#55271</a>), that is <code>gmail.compose</code> and <code>gmail.readonly</code>. Send and draft work; label and trash fail without <code>gmail.modify</code>.</li>
-<li><strong>No Claude setting narrows it.</strong> Enterprise-managed auth has a scopes step, but not for Gmail (<a href="https://support.claude.com/en/articles/15537633-auto-connect-your-organization-s-apps-to-claude" target="_blank" rel="noopener">15537633</a>).</li>
-<li><strong>Check our tenant [GWA]:</strong> API controls &gt; Manage Third-Party App Access &gt; Accessed apps &gt; "Claude for Gmail" shows its scopes.</li>
+<li><strong>No Claude setting narrows it.</strong> Enterprise-managed auth has a <a href="https://support.claude.com/en/articles/15537633-auto-connect-your-organization-s-apps-to-claude#h_53dd1f8864" target="_blank" rel="noopener">scopes step</a>, but not for Gmail (<a href="https://support.claude.com/en/articles/15537633-auto-connect-your-organization-s-apps-to-claude#h_9a446f251c" target="_blank" rel="noopener">15537633</a>).</li>
+<li><strong>Check our tenant [GWA]:</strong> API controls &gt; Manage Third-Party App Access &gt; <a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#reviewapps" target="_blank" rel="noopener">Accessed apps</a> &gt; "Claude for Gmail" shows its scopes.</li>
 </ul>
-<figure><a href="../images/anthropic-gmail-oauth-note.png" target="_blank" rel="noopener"><img src="../images/anthropic-gmail-oauth-note.png" alt="Google's OAuth screen mentions email sending permissions" width="1400" height="461" style="aspect-ratio:1400/461" loading="lazy"></a><figcaption>Source: <a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors" target="_blank" rel="noopener">Anthropic Help Center</a>.</figcaption></figure>
+<figure><a href="../images/anthropic-gmail-oauth-note.png" target="_blank" rel="noopener"><img src="../images/anthropic-gmail-oauth-note.png" alt="Google's OAuth screen mentions email sending permissions" width="1400" height="461" style="aspect-ratio:1400/461" loading="lazy"></a><figcaption>Source: <a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors#h_60ffa285c8" target="_blank" rel="noopener">Anthropic Help Center</a>.</figcaption></figure>
 <p>What we can do about it:</p>
 <ul>
 <li><strong>Accept it</strong>, relying on Anthropic's Blocked policy (<a href="#findings--83-residual-risks-of-82-why-81-is-the-guarantee">8.3</a>).</li>
@@ -590,47 +594,47 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 </thead>
 <tbody>
 <tr>
-<td>Enable or remove Gmail for the org; members still sign in to Google themselves (<a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities" target="_blank" rel="noopener">11176164</a>)</td>
+<td>Enable or remove Gmail for the org; members still sign in to Google themselves (<a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_b6f69dbd72" target="_blank" rel="noopener">11176164</a>)</td>
 <td>Yes</td>
 <td>Yes</td>
 </tr>
 <tr>
-<td><strong>Org-wide policy per tool or group: Always allow / Needs approval / Blocked.</strong> "Individual users can't override it" (<a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities" target="_blank" rel="noopener">11176164</a>)</td>
+<td><strong>Org-wide policy per tool or group: Always allow / Needs approval / Blocked.</strong> "Individual users can't override it" (<a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9fa8289074" target="_blank" rel="noopener">11176164</a>)</td>
 <td><strong>Yes</strong></td>
 <td><strong>Yes</strong></td>
 </tr>
 <tr>
-<td>Per-role grants. "Blocked: The connector or tool is hidden. Claude can't see it or call it." (<a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans" target="_blank" rel="noopener">13930452</a>)</td>
+<td>Per-role grants. "Blocked: The connector or tool is hidden. Claude can't see it or call it." (<a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans#h_fb6a5a0907" target="_blank" rel="noopener">13930452</a>)</td>
 <td>No</td>
 <td><strong>Yes</strong></td>
 </tr>
 <tr>
-<td>Restrict verified-domain connectors: personal Claude accounts can't connect work Gmail; not retroactive (<a href="https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise" target="_blank" rel="noopener">15402193</a>)</td>
+<td>Restrict verified-domain connectors: personal Claude accounts can't connect work Gmail; <a href="https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise#h_077f0599f4" target="_blank" rel="noopener">not retroactive</a> (<a href="https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise#h_154f8902a3" target="_blank" rel="noopener">15402193</a>)</td>
 <td>No</td>
 <td><strong>Yes</strong></td>
 </tr>
 <tr>
-<td>Member connector requests; an Owner can "Decline it and block the connector"</td>
+<td>Member connector requests; an Owner can "Decline it and block the connector" (<a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9213598058" target="_blank" rel="noopener">11176164</a>)</td>
 <td>On by default</td>
 <td>Off by default</td>
 </tr>
 </tbody>
 </table></div>
-<figure><a href="../images/anthropic-tool-permissions.png" target="_blank" rel="noopener"><img src="../images/anthropic-tool-permissions.png" alt="Owners can set connector tools to Always allow, Needs approval or Blocked, org-wide" width="1400" height="1437" style="aspect-ratio:1400/1437" loading="lazy"></a><figcaption>Source: <a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities" target="_blank" rel="noopener">Anthropic Help Center</a>.</figcaption></figure>
-<p>"Connector permissions are enforced on Anthropic's servers" on every Claude surface, and "Access fails toward denying, never toward granting." Locally run connectors aren't covered (<a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans" target="_blank" rel="noopener">13930452</a>).</p>
-<p><strong>Use Blocked, not Needs approval:</strong> Research mode calls tools "automatically without further approval" (<a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp" target="_blank" rel="noopener">11175166</a>), Desktop's local Claude Code sessions get only <code>blocked</code> (<a href="https://code.claude.com/docs/en/mcp.md#organization-controls-on-connector-tools" target="_blank" rel="noopener">mcp.md</a>), and users report approvals not shown in Claude Code (#89304, <strong>Community</strong>).</p>
-<p><strong>Block the whole write/delete group</strong>, not single tools: the docs don't say what default a new tool gets (that the group catches it is <strong>Inferred</strong>). The grouping likely follows MCP annotations (<a href="https://claude.com/docs/connectors/building/review-criteria.md" target="_blank" rel="noopener">review criteria</a>), so check each tool once.</p>
+<figure><a href="../images/anthropic-tool-permissions.png" target="_blank" rel="noopener"><img src="../images/anthropic-tool-permissions.png" alt="Owners can set connector tools to Always allow, Needs approval or Blocked, org-wide" width="1400" height="1437" style="aspect-ratio:1400/1437" loading="lazy"></a><figcaption>Source: <a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9fa8289074" target="_blank" rel="noopener">Anthropic Help Center</a>.</figcaption></figure>
+<p>"Connector permissions are enforced on Anthropic's servers" on every Claude surface, and "<a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans#:~:text=Access%20fails%20toward%20denying%2C%20never%20toward%20granting" target="_blank" rel="noopener">Access fails toward denying, never toward granting.</a>" Locally run connectors aren't covered (<a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans#h_fc529fed57" target="_blank" rel="noopener">13930452</a>).</p>
+<p><strong>Use Blocked, not Needs approval:</strong> Research mode calls tools "automatically without further approval" (<a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp#h_2d88678c54" target="_blank" rel="noopener">11175166</a>), Desktop's local Claude Code sessions get only <code>blocked</code> (<a href="https://code.claude.com/docs/en/mcp#organization-controls-on-connector-tools" target="_blank" rel="noopener">mcp.md</a>), and users report approvals not shown in Claude Code (#89304, <strong>Community</strong>).</p>
+<p><strong>Block the whole write/delete group</strong>, not single tools: the docs don't say what default a new tool gets (that the group catches it is <strong>Inferred</strong>). The grouping likely follows MCP annotations (<a href="https://claude.com/docs/connectors/building/review-criteria#provide-tool-annotations" target="_blank" rel="noopener">review criteria</a>), so check each tool once.</p>
 <h3 id="findings--34-setup-steps-for-the-built-in-route-claude-owner">3.4 Setup steps for the built-in route (Claude Owner)</h3>
-<p>Add Gmail under Organization settings &gt; Connectors, then in its <strong>Tool permissions</strong> set the write/delete group and every send, reply, forward, draft, trash, spam and label tool to <strong>Blocked</strong>. Claude Code applies this on its own. Enterprise: turn on the verified-domain restriction. [GWA] set "Claude for Gmail" to Trusted for the OUs that use it, or users may see "Access blocked". Full steps: <a href="#rb-claude-org--route-a-built-in-gmail-connector-with-write-tools-blocked">runbooks/claude-org.md</a>.</p>
+<p>Add Gmail under Organization settings &gt; Connectors, then in its <strong>Tool permissions</strong> set the write/delete group and every send, reply, forward, draft, trash, spam and label tool to <strong>Blocked</strong> (<a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9fa8289074" target="_blank" rel="noopener">11176164</a>). Claude Code <a href="https://code.claude.com/docs/en/mcp#organization-controls-on-connector-tools" target="_blank" rel="noopener">applies this on its own</a>. Enterprise: turn on the verified-domain restriction. [GWA] set "Claude for Gmail" to Trusted for the OUs that use it, or users may see <a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors#h_c56f0774e8" target="_blank" rel="noopener">"Access blocked"</a>. Full steps: <a href="#rb-claude-org--route-a-built-in-gmail-connector-with-write-tools-blocked">runbooks/claude-org.md</a>.</p>
 <h2 id="findings--4-claude-surfaces-in-detail">4. Claude surfaces in detail</h2>
 <h3 id="findings--41-claudeai-web-desktop-chat-and-mobile-team-and-enterprise">4.1 claude.ai web, desktop chat and mobile (Team and Enterprise)</h3>
 <ul>
-<li><strong>Only Owners add custom connectors</strong> (on Enterprise also custom roles with Libraries "Manage"), so members can't add an unrestricted Gmail MCP (<a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp" target="_blank" rel="noopener">11175166</a>).</li>
-<li><strong>Custom connectors are called from Anthropic's cloud</strong>, so the server must be public or behind <a href="https://claude.com/docs/connectors/mcp-tunnels/overview.md" target="_blank" rel="noopener">MCP tunnels</a>. OAuth client options: <strong>"Use Claude's published identity"</strong> (CIMD, Anthropic's recommended option), "Register automatically" (DCR), or "Use your own OAuth client" (<a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities" target="_blank" rel="noopener">11176164</a>).</li>
-<li><strong>The org tool policy covers org-added custom connectors too</strong>, such as Payhawk or the guard.</li>
+<li><strong>Only Owners add custom connectors</strong> (on Enterprise also custom roles with Libraries "Manage"), so members can't add an unrestricted Gmail MCP (<a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded" target="_blank" rel="noopener">11175166</a>).</li>
+<li><strong>Custom connectors are called from Anthropic's cloud</strong>, so the server must be public or behind <a href="https://claude.com/docs/connectors/mcp-tunnels/overview#decide-when-to-use-an-mcp-tunnel" target="_blank" rel="noopener">MCP tunnels</a>. OAuth client options: <strong>"Use Claude's published identity"</strong> (CIMD, Anthropic's recommended option), "Register automatically" (DCR), or "Use your own OAuth client" (<a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_4201f9e625" target="_blank" rel="noopener">11176164</a>).</li>
+<li><strong>The org tool policy covers org-added custom connectors too</strong>, such as Payhawk or the guard (<a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans#h_fc529fed57" target="_blank" rel="noopener">13930452</a>).</li>
 </ul>
 <h3 id="findings--42-claude-code">4.2 Claude Code</h3>
-<p>Claude Code loads claude.ai connectors and server-managed settings only with a Team or Enterprise claude.ai login, not with <code>ANTHROPIC_API_KEY</code>, <code>ANTHROPIC_AUTH_TOKEN</code>, <code>apiKeyHelper</code> or a third-party provider (<a href="https://code.claude.com/docs/en/mcp.md#use-mcp-servers-from-claude-ai" target="_blank" rel="noopener">mcp.md</a>, <a href="https://code.claude.com/docs/en/server-managed-settings.md" target="_blank" rel="noopener">server-managed settings</a>). nexos documents running Claude Code through its gateway that way (<a href="https://docs.nexos.ai/gateway-api/integrations/claude-code.md" target="_blank" rel="noopener">nexos</a>). <strong>Only MDM or file-deployed managed settings govern those sessions.</strong></p>
+<p>Claude Code loads claude.ai connectors only with a claude.ai login (<a href="https://code.claude.com/docs/en/mcp#use-mcp-servers-from-claude-ai" target="_blank" rel="noopener">mcp.md</a>). Server-managed settings follow the credential: a Console API key gets its own Console org's settings, not the claude.ai org's, and a third-party provider or a custom <code>ANTHROPIC_BASE_URL</code> skips the fetch (<a href="https://code.claude.com/docs/en/server-managed-settings#platform-availability" target="_blank" rel="noopener">server-managed settings</a>). nexos documents running Claude Code through its gateway that way (<a href="https://docs.nexos.ai/gateway-api/integrations/claude-code#id-2.-connect-claude-code-to-nexos.ai" target="_blank" rel="noopener">nexos</a>). <strong>Only MDM or file-deployed managed settings govern those sessions.</strong></p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -641,48 +645,48 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <tbody>
 <tr>
 <td>Org tool policy</td>
-<td><code>blocked</code> tools are filtered out; <code>ask</code> prompts every call (<a href="https://code.claude.com/docs/en/mcp.md#organization-controls-on-connector-tools" target="_blank" rel="noopener">mcp.md</a>)</td>
+<td><code>blocked</code> tools are filtered out; <code>ask</code> prompts every call (<a href="https://code.claude.com/docs/en/mcp#organization-controls-on-connector-tools" target="_blank" rel="noopener">mcp.md</a>)</td>
 </tr>
 <tr>
 <td>Deny rules</td>
-<td>e.g. <code>mcp__claude_ai_Gmail__*</code>. A deny from any level wins; managed rules can't be overridden (<a href="https://code.claude.com/docs/en/permissions.md" target="_blank" rel="noopener">permissions.md</a>)</td>
+<td>e.g. <code>mcp__claude_ai_Gmail__*</code>. A deny from any level wins; managed rules can't be overridden (<a href="https://code.claude.com/docs/en/permissions#settings-precedence" target="_blank" rel="noopener">permissions.md</a>)</td>
 </tr>
 <tr>
 <td>MCP allowlist</td>
-<td><code>allowManagedMcpServersOnly</code> + <code>allowedMcpServers</code> by <code>serverUrl</code> (<code>serverName</code> is "not a security control"); <code>deniedMcpServers</code> always wins (<a href="https://code.claude.com/docs/en/managed-mcp.md" target="_blank" rel="noopener">managed-mcp.md</a>)</td>
+<td><code>allowManagedMcpServersOnly</code> + <code>allowedMcpServers</code> by <code>serverUrl</code> (<code>serverName</code> is <a href="https://code.claude.com/docs/en/managed-mcp#how-servername-entries-match" target="_blank" rel="noopener">"not a security control"</a>); <code>deniedMcpServers</code> <a href="https://code.claude.com/docs/en/managed-mcp#how-a-server-is-evaluated" target="_blank" rel="noopener">always wins</a> (<a href="https://code.claude.com/docs/en/managed-mcp#policy-based-control-with-allowlists-and-denylists" target="_blank" rel="noopener">managed-mcp.md</a>)</td>
 </tr>
 <tr>
 <td><code>managed-mcp.json</code></td>
-<td>Loads only listed servers and drops claude.ai connectors. MDM file only</td>
+<td><a href="https://code.claude.com/docs/en/managed-mcp#exclusive-control-with-managed-mcp-json" target="_blank" rel="noopener">Loads only listed servers and drops claude.ai connectors</a>. <a href="https://code.claude.com/docs/en/managed-mcp#deploy-managed-mcp-json" target="_blank" rel="noopener">MDM file only</a></td>
 </tr>
 <tr>
 <td>OAuth scope pin</td>
-<td><code>"oauth": {"scopes": "...gmail.readonly"}</code> for user-added servers (<a href="https://code.claude.com/docs/en/mcp.md#restrict-oauth-scopes" target="_blank" rel="noopener">mcp.md</a>)</td>
+<td><code>"oauth": {"scopes": "...gmail.readonly"}</code> for user-added servers (<a href="https://code.claude.com/docs/en/mcp#restrict-oauth-scopes" target="_blank" rel="noopener">mcp.md</a>)</td>
 </tr>
 </tbody>
 </table></div>
-<p>MDM reaches every session; "Endpoint-managed settings provide stronger security guarantees."</p>
+<p>MDM reaches every session on the device, though not cloud sessions in Anthropic-hosted environments; "<a href="https://code.claude.com/docs/en/server-managed-settings#choose-between-server-managed-and-endpoint-managed-settings" target="_blank" rel="noopener">Endpoint-managed settings provide stronger security guarantees.</a>"</p>
 <p><strong>Known gap (Community, <a href="https://github.com/anthropics/claude-code/issues/92787" target="_blank" rel="noopener">#92787</a>, open):</strong> in Desktop's Code tab, local sessions name connector tools <code>mcp__&lt;uuid&gt;__send_message</code>, so <code>mcp__claude_ai_Gmail__*</code> rules don't match. The org <code>blocked</code> policy is the reliable control there.</p>
 <p>Examples: <a href="#rb-claude-code-managed-settings">runbooks/claude-code-managed-settings.md</a>.</p>
 <h3 id="findings--43-claude-desktop-api-and-agent-sdk">4.3 Claude Desktop, API and Agent SDK</h3>
 <ul>
-<li><strong>Desktop</strong> (<a href="https://support.claude.com/en/articles/12622667-enterprise-configuration-for-claude-desktop" target="_blank" rel="noopener">12622667</a>): <code>isLocalDevMcpEnabled=false</code> stops user-added local MCP servers, extensions can be blocked or allowlisted, and <code>forceLoginOrgUUID</code> keeps personal accounts out. Team needs MDM.</li>
+<li><strong>Desktop</strong> (<a href="https://support.claude.com/en/articles/12622667-enterprise-configuration-for-claude-desktop#h_003283c7cb" target="_blank" rel="noopener">12622667</a>): <code>isLocalDevMcpEnabled=false</code> stops user-added local MCP servers, extensions can be blocked or allowlisted, and <code>forceLoginOrgUUID</code> keeps personal accounts out. Team needs MDM.</li>
 <li><strong>API and Agent SDK:</strong> developer-side tool allowlists (row 9 above), outside the claude.ai org policy.</li>
 </ul>
 <h2 id="findings--5-nexosai">5. nexos.ai</h2>
-<p>All <strong>Verified</strong> from <a href="https://docs.nexos.ai/workspace/integrations.md" target="_blank" rel="noopener">docs.nexos.ai</a>:</p>
+<p>All <strong>Verified</strong> from <a href="https://docs.nexos.ai/workspace/integrations" target="_blank" rel="noopener">docs.nexos.ai</a>:</p>
 <ul>
-<li><strong>Built-in Gmail:</strong> members connect their own Google account; its tools and scopes are <strong>not documented</strong> (<a href="https://docs.nexos.ai/workspace/integrations/gmail.md" target="_blank" rel="noopener">Gmail</a>).</li>
-<li><strong>Org controls:</strong> each integration is Active or Inactive. No per-tool toggle, and no team-level limit: "Apps remain managed at the company level" (<a href="https://docs.nexos.ai/workspace/settings/organization/roles-and-permissions.md" target="_blank" rel="noopener">Roles</a>).</li>
-<li><strong>Approvals (HITL):</strong> agents pause before "an action that changes something in another tool", but users can pick "Always approve", so it is <strong>advisory</strong> (<a href="https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals.md" target="_blank" rel="noopener">HITL</a>).</li>
-<li><strong>Custom MCP:</strong> Streamable HTTP only, reachable from the internet. Auth is per-user API keys: "Each user will be able to provide their own API key individually." Org-wide once enabled; IP allowlisting on request. <strong>No OAuth and no per-tool limits documented</strong> (<a href="https://docs.nexos.ai/workspace/integrations/custom-mcp.md" target="_blank" rel="noopener">Custom MCP</a>).</li>
+<li><strong>Built-in Gmail:</strong> members connect their own Google account; its tools and scopes are <strong>not documented</strong> (<a href="https://docs.nexos.ai/workspace/integrations/gmail#setting-up-the-integration-as-an-admin" target="_blank" rel="noopener">Gmail</a>).</li>
+<li><strong>Org controls:</strong> each integration is Active or Inactive. No per-tool toggle, and no team-level limit: "Apps remain managed at the company level" (<a href="https://docs.nexos.ai/workspace/settings/organization/roles-and-permissions#team-owner" target="_blank" rel="noopener">Roles</a>).</li>
+<li><strong>Approvals (HITL):</strong> agents pause before "<a href="https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals#:~:text=an%20action%20that%20changes%20something%20in%20another%20tool" target="_blank" rel="noopener">an action that changes something in another tool</a>", but users can pick "Always approve", so it is <strong>advisory</strong> (<a href="https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals#what-you-can-do" target="_blank" rel="noopener">HITL</a>).</li>
+<li><strong>Custom MCP:</strong> <a href="https://docs.nexos.ai/workspace/integrations/custom-mcp#:~:text=nexos.ai%20currently%20supports%20only%20streamable%20HTTP" target="_blank" rel="noopener">Streamable HTTP only, reachable from the internet</a>. Auth is per-user API keys: "<a href="https://docs.nexos.ai/workspace/integrations/custom-mcp#add-the-custom-mcp-to-nexos.ai" target="_blank" rel="noopener">Each user will be able to provide their own API key individually.</a>" <a href="https://docs.nexos.ai/workspace/integrations/custom-mcp#faq" target="_blank" rel="noopener">Org-wide once enabled</a>; <a href="https://docs.nexos.ai/workspace/integrations/custom-mcp#use-the-custom-mcp" target="_blank" rel="noopener">IP allowlisting on request</a>. <strong>No OAuth and no per-tool limits documented</strong> (<a href="https://docs.nexos.ai/workspace/integrations/custom-mcp" target="_blank" rel="noopener">Custom MCP</a>).</li>
 </ul>
-<figure><a href="../images/nexos-integrations-status.png" target="_blank" rel="noopener"><img src="../images/nexos-integrations-status.png" alt="nexos integrations are Active or Inactive" width="1400" height="425" style="aspect-ratio:1400/425" loading="lazy"></a><figcaption>Source: <a href="https://docs.nexos.ai/workspace/integrations.md" target="_blank" rel="noopener">nexos.ai docs, Integrations</a>.</figcaption></figure>
-<figure><a href="../images/nexos-custom-mcp-auth.png" target="_blank" rel="noopener"><img src="../images/nexos-custom-mcp-auth.png" alt="Custom MCP auth is per-user API keys" width="1400" height="587" style="aspect-ratio:1400/587" loading="lazy"></a><figcaption>Source: <a href="https://docs.nexos.ai/workspace/integrations/custom-mcp.md" target="_blank" rel="noopener">nexos.ai docs, Custom MCP</a>.</figcaption></figure>
+<figure><a href="../images/nexos-integrations-status.png" target="_blank" rel="noopener"><img src="../images/nexos-integrations-status.png" alt="nexos integrations are Active or Inactive" width="1400" height="425" style="aspect-ratio:1400/425" loading="lazy"></a><figcaption>Source: <a href="https://docs.nexos.ai/workspace/integrations#what-you-will-find-on-this-page" target="_blank" rel="noopener">nexos.ai docs, Integrations</a>.</figcaption></figure>
+<figure><a href="../images/nexos-custom-mcp-auth.png" target="_blank" rel="noopener"><img src="../images/nexos-custom-mcp-auth.png" alt="Custom MCP auth is per-user API keys" width="1400" height="587" style="aspect-ratio:1400/587" loading="lazy"></a><figcaption>Source: <a href="https://docs.nexos.ai/workspace/integrations/custom-mcp#add-the-custom-mcp-to-nexos.ai" target="_blank" rel="noopener">nexos.ai docs, Custom MCP</a>.</figcaption></figure>
 <p><strong>What works:</strong> built-in Gmail Inactive, the guard as a custom MCP with personal keys (<a href="#nexos-setup">nexos-setup.md</a>), and nexos's Gmail app blocked at Google [GWA]. Untested: whether a key entered at setup becomes a default for members (everyone would then read that mailbox); test with a throwaway account.</p>
 <h2 id="findings--6-provider-and-infrastructure-side">6. Provider and infrastructure side</h2>
 <h3 id="findings--61-gmail-oauth-scopes">6.1 Gmail OAuth scopes</h3>
-<p>From <a href="https://developers.google.com/workspace/gmail/api/auth/scopes" target="_blank" rel="noopener">Gmail API scopes</a>:</p>
+<p>From <a href="https://developers.google.com/workspace/gmail/api/auth/scopes#gmail-scopes" target="_blank" rel="noopener">Gmail API scopes</a>:</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -719,38 +723,38 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 </tr>
 </tbody>
 </table></div>
-<p>A token with only <code>gmail.readonly</code> (plus <code>openid email</code>) can't send, draft, label or delete, <strong>whatever the client does</strong>. Restricted scopes need Google verification, except for an <strong>Internal</strong> app (GCP project owned by our Workspace org) (<a href="https://support.google.com/cloud/answer/13464323" target="_blank" rel="noopener">verification exceptions</a>).</p>
+<p>A token with only <code>gmail.readonly</code> (plus <code>openid email</code>) can't send, draft, label or delete, <strong>whatever the client does</strong>. Restricted scopes need Google verification, except for an <strong>Internal</strong> app (GCP project owned by our Workspace org) (<a href="https://support.google.com/cloud/answer/13464323#:~:text=The%20app%20is%20only%20used%20by%20people%20in%20your%20Google%20Workspace" target="_blank" rel="noopener">verification exceptions</a>).</p>
 <h3 id="findings--62-google-workspace-admin-controls-gwa">6.2 Google Workspace admin controls [GWA]</h3>
-<p>Admin console &gt; Security &gt; Access and data control &gt; <strong>API controls</strong> (<a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data" target="_blank" rel="noopener">Google</a>; needs the Service Settings admin privilege):</p>
+<p>Admin console &gt; Security &gt; Access and data control &gt; <strong>API controls</strong> (<a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#change-access-from-the-app-list" target="_blank" rel="noopener">Google</a>; needs the Service Settings admin privilege):</p>
 <ul>
-<li><strong>Per app, per OU:</strong> Trusted, Limited, <strong>Specific Google data</strong> ("only to scopes that you specify", plus sign-in scopes), or <strong>Blocked</strong>.</li>
-<li><strong>Gmail as a Restricted service:</strong> untrusted apps "stop working, and tokens are revoked." Large blast radius; coordinate first.</li>
-<li><strong>Unconfigured apps:</strong> can be limited; leave "Trust internal apps" unchecked.</li>
-<li><strong>Accessed apps</strong> lists apps holding tokens and their scopes, for audits.</li>
-<li><strong>Domain-wide delegation</strong> (<a href="https://support.google.com/a/answer/162106" target="_blank" rel="noopener">162106</a>) can be limited to <code>gmail.readonly</code>, but can impersonate every user. Per-user OAuth is safer.</li>
+<li><strong>Per app, per OU:</strong> Trusted, Limited, <strong>Specific Google data</strong> ("only to scopes that you specify", plus sign-in scopes), or <strong>Blocked</strong> (<a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#trustorlimit" target="_blank" rel="noopener">Google</a>).</li>
+<li><strong>Gmail as a Restricted service:</strong> untrusted apps "<a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#restrictaccess" target="_blank" rel="noopener">stop working, and tokens are revoked.</a>" Large blast radius; coordinate first.</li>
+<li><strong><a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#unconfigured-third-party-apps" target="_blank" rel="noopener">Unconfigured apps</a>:</strong> can be limited; leave "<a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#internal-apps" target="_blank" rel="noopener">Trust internal apps</a>" unchecked.</li>
+<li><strong><a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#reviewapps" target="_blank" rel="noopener">Accessed apps</a></strong> lists apps holding tokens and their scopes, for audits.</li>
+<li><strong>Domain-wide delegation</strong> (<a href="https://knowledge.workspace.google.com/admin/apps/control-api-access-with-domain-wide-delegation#before-you-begin" target="_blank" rel="noopener">Google</a>) can be limited to <code>gmail.readonly</code>, but can impersonate every user. Per-user OAuth is safer.</li>
 </ul>
 <h3 id="findings--63-googles-own-gmail-mcp-server-developer-preview">6.3 Google's own Gmail MCP server (Developer Preview)</h3>
 <p>From <a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server" target="_blank" rel="noopener">Configure the Gmail MCP server</a> and the <a href="https://developers.google.com/workspace/gmail/api/reference/mcp" target="_blank" rel="noopener">MCP reference</a>:</p>
 <ul>
-<li><strong>Endpoint:</strong> <code>https://gmailmcp.googleapis.com/mcp/v1</code>, Streamable HTTP, OAuth.</li>
-<li><strong>Requires:</strong> enrolment in the Workspace Developer Preview Program (preview terms); the Gmail MCP API (<code>gmailmcp.googleapis.com</code>) enabled; an OAuth client marked "<strong>Use this client for an AI-powered agent</strong>"; and screening of prompts and responses for prompt injection, with Model Armor or your own solution (<a href="https://developers.google.com/workspace/guides/configure-mcp-security" target="_blank" rel="noopener">Workspace MCP security</a>).</li>
-<li><strong>Claude setup:</strong> Web OAuth client with redirect <code>https://claude.ai/api/mcp/auth_callback</code>, added as a custom connector with your own client ID and secret.</li>
-<li><strong>Scopes:</strong> Google's guide requests <code>gmail.readonly</code> <strong>and</strong> <code>gmail.compose</code>.</li>
-<li><strong>Tools:</strong> <code>search_threads</code>, <code>get_thread</code>, <code>get_message</code>, <code>list_labels</code> and <code>list_drafts</code> work with <code>gmail.readonly</code>; draft and label tools need more. <strong>There is no send tool.</strong></li>
-<li>Whether Claude's connector can request only <code>gmail.readonly</code> isn't documented. A Google admin can enforce it with Specific Google data [GWA]; whether sign-in then fails is <strong>untested</strong>.</li>
+<li><strong>Endpoint:</strong> <code>https://gmailmcp.googleapis.com/mcp/v1</code>, Streamable HTTP, OAuth (<a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#others" target="_blank" rel="noopener">guide</a>).</li>
+<li><strong>Requires:</strong> <a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#prerequisites" target="_blank" rel="noopener">enrolment in the Workspace Developer Preview Program</a> (preview terms); the <a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#enable-mcp-services" target="_blank" rel="noopener">Gmail MCP API</a> (<code>gmailmcp.googleapis.com</code>) enabled; an OAuth client marked "<a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#configure-mcp-client" target="_blank" rel="noopener"><strong>Use this client for an AI-powered agent</strong></a>"; and <a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#prompt-injection" target="_blank" rel="noopener">screening of prompts and responses for prompt injection</a>, with Model Armor or your own solution (<a href="https://developers.google.com/workspace/guides/configure-mcp-security#model-armor" target="_blank" rel="noopener">Workspace MCP security</a>).</li>
+<li><strong>Claude setup:</strong> Web OAuth client with redirect <code>https://claude.ai/api/mcp/auth_callback</code>, added as a custom connector with your own client ID and secret (<a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#claude" target="_blank" rel="noopener">guide</a>).</li>
+<li><strong>Scopes:</strong> <a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#configure-consent-screen" target="_blank" rel="noopener">Google's guide</a> requests <code>gmail.readonly</code> <strong>and</strong> <code>gmail.compose</code>.</li>
+<li><strong>Tools:</strong> <code>search_threads</code>, <code>get_thread</code>, <code>get_message</code>, <code>list_labels</code> and <code>list_drafts</code> work with <code>gmail.readonly</code> (each tool's page lists its scopes, e.g. <a href="https://developers.google.com/workspace/gmail/api/reference/mcp/tools_list/search_threads#authorization-scopes" target="_blank" rel="noopener">search_threads</a>); draft and label tools need more. <strong>There is no send tool</strong> (<a href="https://developers.google.com/workspace/gmail/api/reference/mcp#toolsets" target="_blank" rel="noopener">tool list</a>).</li>
+<li>Whether Claude's connector can request only <code>gmail.readonly</code> isn't documented. A Google admin can enforce it with <a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#trustorlimit" target="_blank" rel="noopener">Specific Google data</a> [GWA]; whether sign-in then fails is <strong>untested</strong>.</li>
 </ul>
 <h3 id="findings--64-mcp-tool-annotations-does-anything-enforce-them">6.4 MCP tool annotations: does anything enforce them?</h3>
-<p>No. The <a href="https://modelcontextprotocol.io/specification/2026-07-28/server/tools.md" target="_blank" rel="noopener">MCP spec</a> says clients "MUST consider tool annotations to be untrusted unless they come from trusted servers". Claude uses them only for defaults and grouping (<a href="https://claude.com/docs/connectors/building/review-criteria.md" target="_blank" rel="noopener">review criteria</a>). A proxy should set them accurately but enforce on its own.</p>
+<p>No. The <a href="https://modelcontextprotocol.io/specification/2026-07-28/server/tools#:~:text=clients%20MUST%20consider%20tool%20annotations%20to%20be%20untrusted" target="_blank" rel="noopener">MCP spec</a> says clients "MUST consider tool annotations to be untrusted unless they come from trusted servers". Claude uses them only for defaults and grouping (<a href="https://claude.com/docs/connectors/building/review-criteria#provide-tool-annotations" target="_blank" rel="noopener">review criteria</a>). A proxy should set them accurately but enforce on its own.</p>
 <h3 id="findings--65-payhawk-mcp">6.5 Payhawk MCP</h3>
-<p>From Payhawk's Help Center: <a href="https://payhawk.com/help/payhawk-mcp-overview.md" target="_blank" rel="noopener">About</a>, <a href="https://payhawk.com/help/connecting-payhawk-mcp.md" target="_blank" rel="noopener">Connecting</a>, <a href="https://payhawk.com/help/payhawk-mcp-tool-reference.md" target="_blank" rel="noopener">Tool reference</a>, <a href="https://payhawk.com/help/faq-on-the-payhawk-mcp.md" target="_blank" rel="noopener">FAQ</a>, <a href="https://payhawk.com/help/overview-of-the-payhawk-developer-api.md" target="_blank" rel="noopener">Developer API</a>.</p>
+<p>From Payhawk's Help Center: <a href="https://payhawk.com/help/payhawk-mcp-overview" target="_blank" rel="noopener">About</a>, <a href="https://payhawk.com/help/connecting-payhawk-mcp" target="_blank" rel="noopener">Connecting</a>, <a href="https://payhawk.com/help/payhawk-mcp-tool-reference" target="_blank" rel="noopener">Tool reference</a>, <a href="https://payhawk.com/help/faq-on-the-payhawk-mcp" target="_blank" rel="noopener">FAQ</a>, <a href="https://payhawk.com/help/overview-of-the-payhawk-developer-api" target="_blank" rel="noopener">Developer API</a>.</p>
 <ul>
-<li><strong>Official and hosted:</strong> <code>https://mcp.payhawk.com/mcp</code>, Streamable HTTP.</li>
-<li><strong>Auth:</strong> OAuth with the user's own Payhawk login, so Payhawk roles still apply.</li>
-<li><strong>Client allowlist:</strong> "Payhawk accepts sign-ins only from the AI Assistants in the table" (Claude, Claude Code, ChatGPT, Cursor and others, <strong>not nexos.ai</strong>). Others fail with <code>host-not-allowed</code>; requests go to support@payhawk.com.</li>
-<li><strong>Write tools:</strong> 82 tools, many write. Writes "always show a preview and need your confirmation" (advisory); it "never starts a payment or a transfer".</li>
-<li><strong>Developer API:</strong> keys can be <strong>Read-only</strong>, but are account-wide, not per user.</li>
+<li><strong>Official and hosted:</strong> <code>https://mcp.payhawk.com/mcp</code>, Streamable HTTP (<a href="https://payhawk.com/help/connecting-payhawk-mcp#before-you-start" target="_blank" rel="noopener">Connecting</a>).</li>
+<li><strong>Auth:</strong> OAuth with the user's own Payhawk login, so Payhawk roles still apply (<a href="https://payhawk.com/help/payhawk-mcp-overview#what-makes-the-payhawk-mcp-different" target="_blank" rel="noopener">About</a>).</li>
+<li><strong>Client allowlist:</strong> "Payhawk accepts sign-ins only from the AI Assistants in the table" (Claude, Claude Code, ChatGPT, Cursor and others, <strong>not nexos.ai</strong>). Others fail with <code>host-not-allowed</code>; requests go to support@payhawk.com (<a href="https://payhawk.com/help/connecting-payhawk-mcp#supported-ai-assistants" target="_blank" rel="noopener">Connecting</a>).</li>
+<li><strong>Write tools:</strong> <a href="https://payhawk.com/help/payhawk-mcp-tool-reference#full-list-of-supported-payhawk-mcp-tools" target="_blank" rel="noopener">82 tools</a>, many write. Writes "<a href="https://payhawk.com/help/payhawk-mcp-tool-reference#:~:text=They%20always%20show%20a%20preview%20and%20need%20your%20confirmation" target="_blank" rel="noopener">always show a preview and need your confirmation</a>" (advisory); it "<a href="https://payhawk.com/help/payhawk-mcp-overview#:~:text=The%20Payhawk%20MCP%20never%20starts%20a%20payment%20or%20a%20transfer" target="_blank" rel="noopener">never starts a payment or a transfer</a>".</li>
+<li><strong>Developer API:</strong> keys can be <strong>Read-only</strong>, but are account-wide, not per user (<a href="https://payhawk.com/help/overview-of-the-payhawk-developer-api#h_8996f3095d" target="_blank" rel="noopener">Developer API</a>).</li>
 </ul>
-<figure><a href="../images/payhawk-supported-clients.png" target="_blank" rel="noopener"><img src="../images/payhawk-supported-clients.png" alt="Payhawk accepts sign-ins only from the listed AI apps; nexos.ai is not listed" width="1400" height="1983" style="aspect-ratio:1400/1983" loading="lazy"></a><figcaption>Source: <a href="https://payhawk.com/help/connecting-payhawk-mcp.md" target="_blank" rel="noopener">Payhawk Help Center</a>.</figcaption></figure>
+<figure><a href="../images/payhawk-supported-clients.png" target="_blank" rel="noopener"><img src="../images/payhawk-supported-clients.png" alt="Payhawk accepts sign-ins only from the listed AI apps; nexos.ai is not listed" width="1400" height="1983" style="aspect-ratio:1400/1983" loading="lazy"></a><figcaption>Source: <a href="https://payhawk.com/help/connecting-payhawk-mcp#supported-ai-assistants" target="_blank" rel="noopener">Payhawk Help Center</a>.</figcaption></figure>
 <p>The read / write split of all 82 tools is in <a href="#rb-payhawk--tool-classification-82-tools">runbooks/payhawk.md</a>. It is <strong>Inferred from tool names</strong>, so block anything unclear.</p>
 <h2 id="findings--7-the-custom-read-only-proxy-route">7. The custom read-only proxy route</h2>
 <p>Built in this repo as <a href="#readme">MCP Guard</a> (<a href="#proxy-design">design</a>): a default-deny allowlist, <code>gmail.readonly</code> tokens only, the GA Gmail API by default (Google's Gmail MCP by config), OAuth sign-in for Claude and personal keys for nexos. Payhawk wiring and a real deployment are still open (<a href="#deploy--open-items">DEPLOY.md</a>).</p>
@@ -779,12 +783,12 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <h2 id="findings--9-payhawk-specific-recommendation">9. Payhawk-specific recommendation</h2>
 <ul>
 <li><strong>Claude only:</strong> add <code>https://mcp.payhawk.com/mcp</code> as an org custom connector and <strong>Block every write and unclear tool</strong>. Enforced server-side, no code, per-user Payhawk permissions kept.</li>
-<li><strong>nexos, or a credential-level guarantee:</strong> put the guard in front of Payhawk (<a href="#proxy-design--payhawk">design</a>). That needs <strong>Payhawk Support to allowlist the guard's redirect URI</strong>; until then sign-in fails with <code>host-not-allowed</code>.</li>
-<li>Payhawk roles are another hard floor, per user rather than per tool.</li>
+<li><strong>nexos, or a credential-level guarantee:</strong> put the guard in front of Payhawk (<a href="#proxy-design--payhawk">design</a>). That needs <strong>Payhawk Support to allowlist the guard's redirect URI</strong>; until then sign-in fails with <a href="https://payhawk.com/help/connecting-payhawk-mcp#supported-ai-assistants" target="_blank" rel="noopener"><code>host-not-allowed</code></a>.</li>
+<li><a href="https://payhawk.com/help/payhawk-mcp-overview#what-makes-the-payhawk-mcp-different" target="_blank" rel="noopener">Payhawk roles</a> are another hard floor, per user rather than per tool.</li>
 </ul>
 <p>Steps: <a href="#rb-payhawk">runbooks/payhawk.md</a>.</p>
 <h2 id="findings--10-method-and-evidence">10. Method and evidence</h2>
-<p>No accounts were connected and no consent was given. Pages were fetched with <code>curl</code>, GitHub issues with the GitHub CLI. Not captured: nexos.ai/pricing (Cloudflare bot check) and the built-in connector's live tool list (needs a real Google consent). Also used: Anthropic <a href="https://support.claude.com/en/articles/12138966-release-notes" target="_blank" rel="noopener">release notes</a>, Claude Code <a href="https://code.claude.com/docs/en/settings-reference.md" target="_blank" rel="noopener">settings reference</a>, nexos <a href="https://docs.nexos.ai/changelog/changelog/latest-updates.md" target="_blank" rel="noopener">changelog</a>, MCP <a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations.md" target="_blank" rel="noopener">authorization security</a>. Gateway sources: <a href="#proxy-design--reuse-an-existing-gateway-or-build">proxy-design.md</a>.</p></section><section class="doc" id="proxy-design"><h1>Proxy design</h1><p class="src-note" style="color:var(--muted);font-size:.85rem;margin:4px 0 0">Source: <code>docs/proxy-design.md</code></p>
+<p>No accounts were connected and no consent was given. Pages were fetched with <code>curl</code>, GitHub issues with the GitHub CLI. Not captured: nexos.ai/pricing (Cloudflare bot check) and the built-in connector's live tool list (needs a real Google consent). Also used: Anthropic <a href="https://support.claude.com/en/articles/12138966-release-notes" target="_blank" rel="noopener">release notes</a>, Claude Code <a href="https://code.claude.com/docs/en/settings-reference" target="_blank" rel="noopener">settings reference</a>, nexos <a href="https://docs.nexos.ai/changelog" target="_blank" rel="noopener">changelog</a>, MCP <a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations" target="_blank" rel="noopener">authorization security</a>. Gateway sources: <a href="#proxy-design--reuse-an-existing-gateway-or-build">proxy-design.md</a>.</p></section><section class="doc" id="proxy-design"><h1>Proxy design</h1><p class="src-note" style="color:var(--muted);font-size:.85rem;margin:4px 0 0">Source: <code>docs/proxy-design.md</code></p>
 <p>This is the design of <a href="#readme">MCP Guard</a>, the read-only proxy built in this repo, and the reasons behind it. Deployment and Payhawk are still open (<a href="#deploy--open-items">DEPLOY.md</a>). Research and evidence labels: <a href="#findings">findings.md</a>. Sources checked on 2026-11-08.</p>
 <h2 id="proxy-design--one-generic-proxy-one-deployment-per-upstream">One generic proxy, one deployment per upstream</h2>
 <p><strong>One codebase:</strong> a default-deny allowlisting proxy with per-upstream config. <strong>One endpoint per upstream</strong>, e.g. <code>gmail-guard.example.com/mcp</code> and later <code>payhawk-guard.example.com/mcp</code>.</p>
@@ -826,7 +830,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 </table></div>
 <p>Switching is a config change (<code>MCP_GUARD_UPSTREAM=gmail-mcp</code>; <a href="#readme--gmail-api-or-gmail-mcp">README</a>).</p>
 <h3 id="proxy-design--payhawk">Payhawk</h3>
-<p>Payhawk would be an <code>mcp</code> upstream in front of <code>https://mcp.payhawk.com/mcp</code>, allowing the read tools from the <a href="#rb-payhawk--tool-classification-82-tools">tool classification</a>. Not wired yet: an <code>mcp</code> upstream receives the person's Google token, while Payhawk needs its own per-person sign-in, which Payhawk refuses until Support allowlists the guard's redirect URI (<a href="#proxy-design--how-the-proxy-authenticates-upstream">upstream auth</a>). For Claude only, skip the proxy and Block Payhawk's write tools in Claude.</p>
+<p>Payhawk would be an <code>mcp</code> upstream in front of <code>https://mcp.payhawk.com/mcp</code>, allowing the read tools from the <a href="#rb-payhawk--tool-classification-82-tools">tool classification</a>. Not wired yet: an <code>mcp</code> upstream receives the person's Google token, while Payhawk needs its own per-person sign-in, which Payhawk <a href="https://payhawk.com/help/troubleshooting-the-payhawk-mcp#sign-in-fails-host-not-allowed" target="_blank" rel="noopener">refuses</a> until Support allowlists the guard's redirect URI (<a href="#proxy-design--how-the-proxy-authenticates-upstream">upstream auth</a>). For Claude only, skip the proxy and Block Payhawk's write tools in Claude.</p>
 <h2 id="proxy-design--architecture">Architecture</h2>
 <pre class="mermaid" data-src="flowchart LR
   CW[&quot;Claude web / desktop / mobile&quot;] -- &quot;Streamable HTTP + OAuth&quot; --&gt; G
@@ -843,15 +847,15 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 </pre>
 <h2 id="proxy-design--transport-and-hosting">Transport and hosting</h2>
 <ul>
-<li><strong>Transport:</strong> Streamable HTTP only. Claude, Claude Code and nexos all support it; nexos supports nothing else.</li>
-<li><strong>Reachability:</strong> claude.ai and nexos call it from their clouds, so it must be public (optionally firewalled to their IPs); Claude also offers <a href="https://claude.com/docs/connectors/mcp-tunnels/overview.md" target="_blank" rel="noopener">MCP tunnels</a>.</li>
-<li><strong>Host:</strong> any container platform behind HTTPS. The OAuth client must live in a GCP project owned by our Workspace org (Internal consent screen, so no restricted-scope verification); secrets come from a secret store; replicas share Redis (<a href="#deploy">DEPLOY.md</a>).</li>
+<li><strong>Transport:</strong> Streamable HTTP only. Claude, Claude Code and nexos all support it; <a href="https://docs.nexos.ai/workspace/integrations/custom-mcp#:~:text=nexos.ai%20currently%20supports%20only%20streamable%20HTTP" target="_blank" rel="noopener">nexos supports nothing else</a>.</li>
+<li><strong>Reachability:</strong> <a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp#h_b66e88c454" target="_blank" rel="noopener">claude.ai</a> and <a href="https://docs.nexos.ai/workspace/integrations/custom-mcp#:~:text=if%20you%20need%20to%20whitelist%20nexos.ai%20IPs" target="_blank" rel="noopener">nexos</a> call it from their clouds, so it must be public (optionally firewalled to their IPs); Claude also offers <a href="https://claude.com/docs/connectors/mcp-tunnels/overview" target="_blank" rel="noopener">MCP tunnels</a>.</li>
+<li><strong>Host:</strong> any container platform behind HTTPS. The OAuth client must live in a GCP project owned by our Workspace org (Internal consent screen, so <a href="https://support.google.com/cloud/answer/13464323#:~:text=Internal%20Use%20apps,configured%20for%20internal%20use" target="_blank" rel="noopener">no restricted-scope verification</a>); secrets come from a secret store; replicas share Redis (<a href="#deploy">DEPLOY.md</a>).</li>
 </ul>
 <h2 id="proxy-design--how-users-authenticate-to-the-proxy">How users authenticate to the proxy</h2>
 <ul>
-<li><strong>Claude (web, Desktop, Claude Code):</strong> the guard is an <strong>OAuth 2.1 authorization server</strong> for MCP clients (CIMD and DCR, PKCE, consent page) and <strong>issues its own tokens</strong>. Use Claude's recommended "Use Claude's published identity" (CIMD); by default the guard accepts only Claude's callbacks. Signing in is the Google sign-in for <code>openid email gmail.readonly</code>, offline so a refresh token comes back. Only verified accounts of our Workspace domain (<code>hd</code> claim) get through. Built on FastMCP's <a href="https://gofastmcp.com/docs/servers/auth/oauth-proxy.md" target="_blank" rel="noopener">OAuthProxy</a> and <a href="https://gofastmcp.com/docs/integrations/google.md" target="_blank" rel="noopener">GoogleProvider</a>: Google tokens are stored Fernet-encrypted, never handed to the client.</li>
-<li><strong>nexos.ai:</strong> its custom MCP documents only per-user API keys, so the guard has a <strong>personal key mode</strong> (<code>MCP_GUARD_PERSONAL_KEYS=true</code>, next to OAuth). A user signs in with Google on the guard's <code>/keys</code> page and pastes the revocable key into nexos (<a href="#nexos-setup">nexos-setup.md</a>).</li>
-<li><strong>No token passthrough</strong>, as the <a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations.md" target="_blank" rel="noopener">MCP spec</a> requires. FastMCP forwards incoming headers by default, so the guard sets <code>forward_incoming_headers=False</code> (<a href="https://gofastmcp.com/docs/servers/providers/proxy.md" target="_blank" rel="noopener">FastMCP proxy</a>).</li>
+<li><strong>Claude (web, Desktop, Claude Code):</strong> the guard is an <strong>OAuth 2.1 authorization server</strong> for MCP clients (CIMD and DCR, PKCE, consent page) and <strong>issues its own tokens</strong>. Use Claude's recommended <a href="https://claude.com/docs/connectors/custom/add-unlisted#choose-authentication-settings" target="_blank" rel="noopener">"Use Claude's published identity"</a> (CIMD); by default the guard accepts only Claude's callbacks. Signing in is the Google sign-in for <code>openid email gmail.readonly</code>, offline so a refresh token comes back. Only verified accounts of our Workspace domain (<code>hd</code> claim) get through. Built on FastMCP's <a href="https://gofastmcp.com/docs/servers/auth/oauth-proxy#token-architecture" target="_blank" rel="noopener">OAuthProxy</a> and <a href="https://gofastmcp.com/docs/integrations/google" target="_blank" rel="noopener">GoogleProvider</a>: Google tokens are stored Fernet-encrypted, <a href="https://gofastmcp.com/docs/servers/auth/oauth-proxy#client-facing-mitigation" target="_blank" rel="noopener">never handed to the client</a>.</li>
+<li><strong>nexos.ai:</strong> its <a href="https://docs.nexos.ai/workspace/integrations/custom-mcp#add-the-custom-mcp-to-nexos.ai" target="_blank" rel="noopener">custom MCP</a> documents only per-user API keys, so the guard has a <strong>personal key mode</strong> (<code>MCP_GUARD_PERSONAL_KEYS=true</code>, next to OAuth). A user signs in with Google on the guard's <code>/keys</code> page and pastes the revocable key into nexos (<a href="#nexos-setup">nexos-setup.md</a>).</li>
+<li><strong>No token passthrough</strong>, as the <a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations#access-token-privilege-restriction" target="_blank" rel="noopener">MCP spec</a> requires. FastMCP forwards incoming headers by default, so the guard sets <code>forward_incoming_headers=False</code> (<a href="https://gofastmcp.com/docs/servers/providers/proxy#http-header-forwarding" target="_blank" rel="noopener">FastMCP proxy</a>).</li>
 </ul>
 <h3 id="proxy-design--auth-flow-nexos-personal-key-mode">Auth flow: nexos personal key mode</h3>
 <pre class="mermaid" data-src="sequenceDiagram
@@ -889,13 +893,13 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <tr>
 <td>Gmail</td>
 <td>Per-user OAuth with <strong>only <code>gmail.readonly</code></strong> via our Internal client, which the Google admin limits to that scope [GWA]</td>
-<td>Domain-wide delegation limited to <code>gmail.readonly</code>; can impersonate anyone</td>
+<td><a href="https://knowledge.workspace.google.com/admin/apps/control-api-access-with-domain-wide-delegation#before-you-begin" target="_blank" rel="noopener">Domain-wide delegation</a> limited to <code>gmail.readonly</code>; can impersonate anyone</td>
 <td>Any broader scope</td>
 </tr>
 <tr>
 <td>Payhawk MCP</td>
-<td>Per-user OAuth with each person's Payhawk login, keeping Payhawk roles. <strong>Blocked</strong> until Payhawk Support allows the guard's redirect URI</td>
-<td>A <strong>Read-only</strong> Developer API key: works today, but one account-wide key, so everyone sees everything</td>
+<td>Per-user OAuth with each person's Payhawk login, keeping Payhawk roles. <strong>Blocked</strong> until <a href="https://payhawk.com/help/troubleshooting-the-payhawk-mcp#sign-in-fails-host-not-allowed" target="_blank" rel="noopener">Payhawk Support</a> allows the guard's redirect URI</td>
+<td>A <strong>Read-only</strong> <a href="https://payhawk.com/help/overview-of-the-payhawk-developer-api#h_8996f3095d" target="_blank" rel="noopener">Developer API key</a>: works today, but one account-wide key, so everyone sees everything</td>
 <td>Token passthrough</td>
 </tr>
 <tr>
@@ -922,7 +926,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <li><strong>Pins (optional, <code>mcp</code> only):</strong> a pinned tool whose definition hash (name, description, input schema) changes is dropped, with one warning. Our own Gmail API tools need no pins.</li>
 <li><strong>Scope floor:</strong> <code>google_scopes</code> must be <code>.readonly</code>, and each Google token must hold exactly those plus sign-in scopes. A broader token is revoked and refused.</li>
 <li><strong>Annotations</strong> never decide anything. <strong>Resources and prompts</strong> are never offered.</li>
-<li><strong>Limits:</strong> results capped at 1 MB (Gmail bodies at 20,000 characters); a per-person rate limit.</li>
+<li><strong>Limits:</strong> results capped at 1 MB (Gmail bodies returned 20,000 characters at a time, attachment contents never read); a per-person rate limit; Gmail rate limits retried briefly.</li>
 <li><strong>Not built:</strong> argument checks (every allowed tool is read-only whatever its arguments) and prompt-injection screening of results.</li>
 </ul>
 <h2 id="proxy-design--logging-and-audit">Logging and audit</h2>
@@ -944,13 +948,13 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 </thead>
 <tbody>
 <tr>
-<td><strong>FastMCP v4</strong> (Python, 28.3k stars)</td>
-<td>Upstream MCP proxy; allowlist mode ("A disabled tool disappears from listings and cannot be called", <a href="https://gofastmcp.com/docs/servers/visibility.md" target="_blank" rel="noopener">visibility</a>); middleware; OAuthProxy + GoogleProvider</td>
+<td><strong>FastMCP v4</strong> (Python, <a href="https://github.com/PrefectHQ/fastmcp" target="_blank" rel="noopener">28.3k stars</a>)</td>
+<td>Upstream MCP proxy; <a href="https://gofastmcp.com/docs/servers/visibility#allowlist-mode" target="_blank" rel="noopener">allowlist mode</a> ("A disabled tool disappears from listings and cannot be called", <a href="https://gofastmcp.com/docs/servers/visibility#component-visibility" target="_blank" rel="noopener">visibility</a>); middleware; OAuthProxy + GoogleProvider</td>
 <td><strong>Built on it</strong> (thin layer: config, pins, audit, personal keys)</td>
 </tr>
 <tr>
 <td><strong>agentgateway</strong> (Rust)</td>
-<td>Per-tool CEL rules (<a href="https://agentgateway.dev/docs/standalone/latest/configuration/security/mcp-authz/" target="_blank" rel="noopener">MCP authz</a>); no per-user upstream OAuth found</td>
+<td>Per-tool CEL rules (<a href="https://agentgateway.dev/docs/standalone/latest/documentation/configuration/security/mcp-authz/#role-based-access-with-jwt-claims" target="_blank" rel="noopener">MCP authz</a>); no per-user upstream OAuth found</td>
 <td>Would still need an auth component and a Gmail server</td>
 </tr>
 <tr>
@@ -960,17 +964,17 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 </tr>
 <tr>
 <td><strong>Cloudflare MCP server portals</strong> (managed)</td>
-<td>Behind Cloudflare Access. Allowlist mode via API (<code>default_disabled: true</code>), otherwise "new tools and prompts are automatically enabled". Per-user upstream OAuth with your own client and scopes (<a href="https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/" target="_blank" rel="noopener">MCP portals</a>)</td>
+<td>Behind Cloudflare Access. <a href="https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/#use-an-allowlist-pattern" target="_blank" rel="noopener">Allowlist mode via API</a> (<code>default_disabled: true</code>), otherwise <a href="https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/#synchronize-the-mcp-server" target="_blank" rel="noopener">"new tools and prompts are automatically enabled"</a>. Per-user upstream OAuth with your own client and scopes (<a href="https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/#configure-manual-oauth-credentials" target="_blank" rel="noopener">MCP portals</a>)</td>
 <td><strong>Best "buy" option.</strong> But Gmail would rely on the Developer Preview Gmail MCP; no pinning; nexos would need a shared token; Payhawk still needs its redirect allowlist; another vendor in the data path</td>
 </tr>
 <tr>
 <td><strong>Google Cloud IAM deny policy</strong> on MCP tools</td>
-<td>Denies <code>tools.call</code> where <code>mcp.googleapis.com/tool.isReadOnly == false</code> (org, folder or project), but "a list of all tools is returned, including read-write tools" (<a href="https://docs.cloud.google.com/mcp/prevent-read-write-tool-use" target="_blank" rel="noopener">prevent read-write tool use</a>). Workspace (Gmail) coverage not stated</td>
+<td>Denies <code>tools.call</code> where <code>mcp.googleapis.com/tool.isReadOnly == false</code> (org, folder or project; <a href="https://docs.cloud.google.com/mcp/prevent-read-write-tool-use#apply-deny-policy" target="_blank" rel="noopener">apply</a>), but "a list of all tools is returned, including read-write tools" (<a href="https://docs.cloud.google.com/mcp/prevent-read-write-tool-use#prevent-read-write-tool-use" target="_blank" rel="noopener">prevent read-write tool use</a>). Workspace (Gmail) coverage not stated</td>
 <td>Only for the <code>gmail-mcp</code> upstream, as a second layer: it trusts Google's read-only flags and doesn't hide write tools. Test when switching</td>
 </tr>
 <tr>
 <td><strong>Docker MCP Gateway</strong></td>
-<td>Local tool filtering (<a href="https://docs.docker.com/reference/cli/docker/mcp/gateway/run/" target="_blank" rel="noopener">docs</a>)</td>
+<td>Local tool filtering (<a href="https://docs.docker.com/reference/cli/docker/mcp/gateway/run/#options" target="_blank" rel="noopener">docs</a>)</td>
 <td>Not multi-user</td>
 </tr>
 <tr>
@@ -980,15 +984,15 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 </tr>
 </tbody>
 </table></div>
-<figure><a href="../images/cloudflare-portal-allowlist.png" target="_blank" rel="noopener"><img src="../images/cloudflare-portal-allowlist.png" alt="Turned-off tools are hidden and cannot be called" width="1400" height="621" style="aspect-ratio:1400/621" loading="lazy"></a><figcaption>Source: <a href="https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/" target="_blank" rel="noopener">Cloudflare docs, MCP server portals</a>, 2026-11-08, highlight added.</figcaption></figure>
+<figure><a href="../images/cloudflare-portal-allowlist.png" target="_blank" rel="noopener"><img src="../images/cloudflare-portal-allowlist.png" alt="Turned-off tools are hidden and cannot be called" width="1400" height="621" style="aspect-ratio:1400/621" loading="lazy"></a><figcaption>Source: <a href="https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/#turn-off-individual-tools-or-prompts" target="_blank" rel="noopener">Cloudflare docs, MCP server portals</a>, 2026-11-08, highlight added.</figcaption></figure>
 <p><strong>Why FastMCP over a Cloudflare portal:</strong> the GA Gmail API, fail-closed pinning, personal keys for nexos, and no extra vendor in the data path. To run no code, a Cloudflare portal in front of Google's Gmail MCP with <code>default_disabled: true</code> and scope <code>gmail.readonly</code> is the credible alternative.</p>
 <p><strong>Stack:</strong> Python 3.12+, FastMCP v4, uv, pydantic, httpx (no Google client library; the Gmail calls are a few GETs). FastMCP maintains the hardest parts: the OAuth bridge, proxying and allowlist visibility. TypeScript would need a hand-built OAuth bridge.</p></section>
 <h2 class="group-title" id="runbooks">Runbooks</h2>
 <details class="runbook" id="rb-google-workspace-admin"><summary>Runbook: Google Workspace admin steps [GWA]<span class="tag">runbook</span></summary><div class="doc-body"><p class="src-note" style="color:var(--muted);font-size:.85rem;margin:4px 0 0">Source: <code>docs/runbooks/google-workspace-admin.md</code></p>
-<p>For Google Workspace admins: make Google hand AI apps Gmail tokens that can only read. A token with only <code>gmail.readonly</code> (plus <code>openid email</code>) can't send, draft, label or delete, whatever the app does (<a href="https://developers.google.com/workspace/gmail/api/auth/scopes" target="_blank" rel="noopener">Gmail API scopes</a>). Background: <a href="#findings">findings.md</a>. Checked on 2026-11-08.</p>
-<p><strong>Privileges:</strong> steps 1 to 5 and 8 need <strong>Service Settings</strong> admin. Step 6 needs <strong>super admin</strong>. Creating the GCP project and OAuth client needs a <strong>GCP project owner</strong> in our org.</p>
+<p>For Google Workspace admins: make Google hand AI apps Gmail tokens that can only read. A token with only <code>gmail.readonly</code> (plus <code>openid email</code>) can't send, draft, label or delete, whatever the app does (<a href="https://developers.google.com/workspace/gmail/api/auth/scopes#restricted-scopes" target="_blank" rel="noopener">Gmail API scopes</a>). Background: <a href="#findings">findings.md</a>. Checked on 2026-11-08.</p>
+<p><strong>Privileges:</strong> steps 1 to 5 and 8 need <strong>Service Settings</strong> admin (<a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#reviewapps" target="_blank" rel="noopener">Google</a>). Step 6 needs <strong>super admin</strong> (<a href="https://knowledge.workspace.google.com/admin/apps/control-api-access-with-domain-wide-delegation#before-you-begin" target="_blank" rel="noopener">Google</a>). Creating the GCP project and OAuth client needs a <strong>GCP project owner</strong> in our org.</p>
 <h2 id="rb-google-workspace-admin--where-the-settings-live">Where the settings live</h2>
-<p>Admin console &gt; Security &gt; Access and data control &gt; <strong>API controls</strong> &gt; Manage App Access.</p>
+<p>Admin console &gt; Security &gt; Access and data control &gt; <strong>API controls</strong> &gt; Manage App Access (<a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#trustorlimit" target="_blank" rel="noopener">Google</a>).</p>
 <figure><a href="../images/google-api-controls-nav.png" target="_blank" rel="noopener"><img src="../images/google-api-controls-nav.png" alt="Where API controls live in the Admin console (Google's own illustration)" width="1400" height="978" style="aspect-ratio:1400/978" loading="lazy"></a></figure><p>Each app gets an access level per organizational unit (OU):</p>
 <div class="table-wrap"><table>
 <thead>
@@ -1016,34 +1020,34 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 </tr>
 </tbody>
 </table></div>
-<figure><a href="../images/google-app-access-levels.png" target="_blank" rel="noopener"><img src="../images/google-app-access-levels.png" alt="Per-app access levels, including Specific Google data and Blocked" width="1400" height="688" style="aspect-ratio:1400/688" loading="lazy"></a><figcaption>Source: <a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data" target="_blank" rel="noopener">Google Workspace Admin Help</a>, captured 2026-11-08.</figcaption></figure>
+<figure><a href="../images/google-app-access-levels.png" target="_blank" rel="noopener"><img src="../images/google-app-access-levels.png" alt="Per-app access levels, including Specific Google data and Blocked" width="1400" height="688" style="aspect-ratio:1400/688" loading="lazy"></a><figcaption>Source: <a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#trustorlimit" target="_blank" rel="noopener">Google Workspace Admin Help</a>, captured 2026-11-08.</figcaption></figure>
 <h2 id="rb-google-workspace-admin--steps">Steps</h2>
 <h3 id="rb-google-workspace-admin--1-record-what-each-ai-app-is-requesting">1. Record what each AI app is requesting</h3>
-<p>Open Manage App Access &gt; <strong>Accessed apps</strong>. Write down the scopes of "Claude for Gmail" (and other Claude apps) and nexos.ai's Gmail app. Users report "Claude for Gmail" holds <code>gmail.readonly</code> + <code>gmail.compose</code> (send).</p>
+<p>Open Manage App Access &gt; <a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#reviewapps" target="_blank" rel="noopener"><strong>Accessed apps</strong></a>. Write down the scopes of "Claude for Gmail" (and other Claude apps) and nexos.ai's Gmail app. Users report "Claude for Gmail" holds <code>gmail.readonly</code> + <code>gmail.compose</code> (<a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors#h_60ffa285c8" target="_blank" rel="noopener">send</a>).</p>
 <h3 id="rb-google-workspace-admin--2-set-the-access-level-for-claude-for-gmail">2. Set the access level for "Claude for Gmail"</h3>
 <p>Pick by route (<a href="#questions">questions.md</a>):</p>
 <ul>
 <li><strong>Proxy route:</strong> <strong>Blocked</strong>.</li>
-<li><strong>Built-in route:</strong> <strong>Trusted</strong> for the OUs that use it, or users may see "Access blocked" (<a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors" target="_blank" rel="noopener">10166901</a>).</li>
+<li><strong>Built-in route:</strong> <strong>Trusted</strong> for the OUs that use it, or users may see "Access blocked" (<a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors#h_c56f0774e8" target="_blank" rel="noopener">10166901</a>).</li>
 <li>Specific Google data = <code>gmail.readonly</code> will probably break sign-in, since the connector also asks for <code>gmail.compose</code> (<strong>untested</strong>; try a pilot OU).</li>
 </ul>
 <h3 id="rb-google-workspace-admin--3-nexosais-gmail-app">3. nexos.ai's Gmail app</h3>
 <p>Set it to <strong>Blocked</strong> (or Specific Google data) so nobody gets Gmail write access through nexos.</p>
 <h3 id="rb-google-workspace-admin--4-configure-our-read-only-oauth-client">4. Configure our read-only OAuth client</h3>
-<p>Set the guard's OAuth client (or the Google Gmail MCP client) to <strong>Specific Google data</strong> with <code>gmail.readonly</code> + sign-in scopes, or Trusted. Keep its consent screen <strong>Internal</strong>, which skips Google's restricted-scope verification (<a href="https://support.google.com/cloud/answer/13464323" target="_blank" rel="noopener">exceptions</a>).</p>
+<p>Set the guard's OAuth client (or the Google Gmail MCP client) to <strong>Specific Google data</strong> with <code>gmail.readonly</code> + sign-in scopes, or Trusted. Keep its consent screen <strong>Internal</strong>, which skips Google's restricted-scope verification (<a href="https://support.google.com/cloud/answer/13464323#:~:text=Internal%20Use%20apps,configured%20for%20internal%20use" target="_blank" rel="noopener">exceptions</a>).</p>
 <h3 id="rb-google-workspace-admin--5-optional-hardening">5. Optional hardening</h3>
 <ul>
-<li><strong>Unconfigured third-party apps:</strong> allow only basic Sign-in-with-Google apps, or none.</li>
-<li><strong>"Trust internal apps":</strong> leave unchecked.</li>
-<li><strong>Gmail service = Restricted:</strong> only Trusted or Specific Google data apps reach Gmail. Others stop working and lose their tokens, so announce it first.</li>
-<li><strong>High-risk Gmail scopes</strong> can be restricted separately.</li>
+<li><a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#unconfigured-third-party-apps" target="_blank" rel="noopener"><strong>Unconfigured third-party apps:</strong></a> allow only basic Sign-in-with-Google apps, or none.</li>
+<li><a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#internal-apps" target="_blank" rel="noopener"><strong>"Trust internal apps":</strong></a> leave unchecked.</li>
+<li><a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#restrictaccess" target="_blank" rel="noopener"><strong>Gmail service = Restricted:</strong></a> only Trusted or Specific Google data apps reach Gmail. Others stop working and lose their tokens, so announce it first.</li>
+<li><a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#high-risk" target="_blank" rel="noopener"><strong>High-risk Gmail scopes</strong></a> can be restricted separately.</li>
 </ul>
 <h3 id="rb-google-workspace-admin--6-only-if-chosen-domain-wide-delegation-super-admin">6. Only if chosen: domain-wide delegation (super admin)</h3>
-<p>Authorize the service account for <code>gmail.readonly</code> only (<a href="https://support.google.com/a/answer/162106" target="_blank" rel="noopener">162106</a>). It can then <strong>impersonate every user</strong>, so prefer per-user OAuth.</p>
+<p>Authorize the service account for <code>gmail.readonly</code> only (<a href="https://knowledge.workspace.google.com/admin/apps/control-api-access-with-domain-wide-delegation#set-up-domain-wide-delegation-for-a-client" target="_blank" rel="noopener">162106</a>). It can then <a href="https://knowledge.workspace.google.com/admin/apps/control-api-access-with-domain-wide-delegation#before-you-begin" target="_blank" rel="noopener"><strong>impersonate every user</strong></a>, so prefer per-user OAuth.</p>
 <h3 id="rb-google-workspace-admin--7-only-if-the-google-gmail-mcp-route-is-chosen">7. Only if the Google Gmail MCP route is chosen</h3>
-<p>Enroll in the Workspace <strong>Developer Preview Program</strong>, enable the Gmail API and <code>gmailmcp.googleapis.com</code>, and mark the OAuth client "Use this client for an AI-powered agent" (<a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server" target="_blank" rel="noopener">Configure Gmail MCP</a>).</p>
+<p>Enroll in the Workspace <a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#prerequisites" target="_blank" rel="noopener"><strong>Developer Preview Program</strong></a>, enable the Gmail API and <code>gmailmcp.googleapis.com</code>, and mark the OAuth client "Use this client for an AI-powered agent" (<a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#configure" target="_blank" rel="noopener">Configure Gmail MCP</a>).</p>
 <h3 id="rb-google-workspace-admin--8-ongoing">8. Ongoing</h3>
-<p>Review OAuth log events in the security investigation tool and re-check <strong>Accessed apps</strong>.</p>
+<p>Review <a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#oauth-logs" target="_blank" rel="noopener">OAuth log events</a> in the security investigation tool and re-check <strong>Accessed apps</strong>.</p>
 <h2 id="rb-google-workspace-admin--effect-on-personal-claude-accounts">Effect on personal Claude accounts</h2>
 <p>On Claude Team, nothing stops a member's <strong>personal</strong> Claude account from connecting work Gmail. Blocking "Claude for Gmail" closes that, but also blocks the org's built-in connector.</p></div></details><details class="runbook" id="rb-claude-org"><summary>Runbook: Claude Owner steps (Team and Enterprise)<span class="tag">runbook</span></summary><div class="doc-body"><p class="src-note" style="color:var(--muted);font-size:.85rem;margin:4px 0 0">Source: <code>docs/runbooks/claude-org.md</code></p>
 <p>For Claude organization Owners: make Gmail read-only in Claude. Background: <a href="#findings--3-can-the-built-in-gmail-connector-be-restricted-to-read-only">findings.md</a>. Sources checked on 2026-11-08; we have no Owner console access, so steps are text only. Our plan is believed to be <strong>Team</strong> (unconfirmed).</p>
@@ -1062,74 +1066,74 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <td>Enable or remove a connector (Organization settings &gt; Connectors)</td>
 <td>Yes</td>
 <td>Yes</td>
-<td>Members still sign in to Google themselves</td>
+<td>Members still <a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_b6f69dbd72" target="_blank" rel="noopener">sign in to Google themselves</a></td>
 </tr>
 <tr>
 <td><strong>Tool policy per tool or group: Always allow / Needs approval / Blocked</strong></td>
 <td><strong>Yes</strong></td>
 <td><strong>Yes</strong></td>
-<td>Org-wide; "individual users can't override it" (<a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities" target="_blank" rel="noopener">11176164</a>)</td>
+<td>Org-wide; "individual users can't override it" (<a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9fa8289074" target="_blank" rel="noopener">11176164</a>)</td>
 </tr>
 <tr>
 <td>Custom roles (per-role connector and tool grants)</td>
 <td>No</td>
 <td><strong>Yes</strong></td>
-<td>Org policy is the ceiling (<a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans" target="_blank" rel="noopener">13930452</a>)</td>
+<td>Org policy is the ceiling (<a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans#h_554f24644e" target="_blank" rel="noopener">13930452</a>)</td>
 </tr>
 <tr>
 <td>Restrict verified-domain connectors</td>
 <td>No</td>
 <td><strong>Yes</strong></td>
-<td>Covers Gmail; not retroactive; fails open if identity can't be checked (<a href="https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise" target="_blank" rel="noopener">15402193</a>)</td>
+<td>Covers Gmail; <a href="https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise#h_077f0599f4" target="_blank" rel="noopener">not retroactive</a>; <a href="https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise#h_5f0f4c7960" target="_blank" rel="noopener">fails open</a> if identity can't be checked (<a href="https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise#h_154f8902a3" target="_blank" rel="noopener">15402193</a>)</td>
 </tr>
 <tr>
 <td>Member connector requests</td>
 <td>On by default</td>
 <td>Off by default</td>
-<td>Owner can "Decline it and block the connector"</td>
+<td>Owner can "Decline it and block the connector" (<a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9213598058" target="_blank" rel="noopener">11176164</a>)</td>
 </tr>
 <tr>
 <td>Who adds custom connectors</td>
 <td>Owners</td>
 <td>Owners, custom roles with Libraries "Manage"</td>
-<td><a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp" target="_blank" rel="noopener">11175166</a></td>
+<td><a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp#h_3d1a65aded" target="_blank" rel="noopener">11175166</a></td>
 </tr>
 </tbody>
 </table></div>
-<figure><a href="../images/anthropic-tool-permissions.png" target="_blank" rel="noopener"><img src="../images/anthropic-tool-permissions.png" alt="Owners can set connector tools to Always allow, Needs approval or Blocked, org-wide" width="1400" height="1437" style="aspect-ratio:1400/1437" loading="lazy"></a><figcaption>Source: <a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities" target="_blank" rel="noopener">Anthropic Help Center</a>, captured 2026-11-08.</figcaption></figure>
-<p>Anthropic's servers enforce the tool policy on web, desktop, mobile, Cowork and Claude Code, and it "fails toward denying". Locally run connectors aren't covered.</p>
-<p><strong>Use Blocked, not Needs approval, for write tools.</strong> Research mode skips approvals, and Desktop's local and SSH Code sessions only honor <code>blocked</code> (<a href="https://code.claude.com/docs/en/mcp.md#organization-controls-on-connector-tools" target="_blank" rel="noopener">mcp.md</a>).</p>
+<figure><a href="../images/anthropic-tool-permissions.png" target="_blank" rel="noopener"><img src="../images/anthropic-tool-permissions.png" alt="Owners can set connector tools to Always allow, Needs approval or Blocked, org-wide" width="1400" height="1437" style="aspect-ratio:1400/1437" loading="lazy"></a><figcaption>Source: <a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9fa8289074" target="_blank" rel="noopener">Anthropic Help Center</a>, captured 2026-11-08.</figcaption></figure>
+<p>Anthropic's servers <a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans#h_fc529fed57" target="_blank" rel="noopener">enforce the tool policy</a> on web, desktop, mobile, Cowork and Claude Code, and it <a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans#h_1f4dd90d00" target="_blank" rel="noopener">"fails toward denying"</a>. Locally run connectors aren't covered.</p>
+<p><strong>Use Blocked, not Needs approval, for write tools.</strong> <a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp#h_2d88678c54" target="_blank" rel="noopener">Research mode skips approvals</a>, and Desktop's local and SSH Code sessions only honor <code>blocked</code> (<a href="https://code.claude.com/docs/en/mcp#organization-controls-on-connector-tools" target="_blank" rel="noopener">mcp.md</a>).</p>
 <h2 id="rb-claude-org--route-a-built-in-gmail-connector-with-write-tools-blocked">Route A: built-in Gmail connector with write tools Blocked</h2>
 <p>Anthropic enforces read-only, but the Google token can still send (<a href="#findings--83-residual-risks-of-82-why-81-is-the-guarantee">residual risks</a>).</p>
 <ol>
-<li>Go to Organization settings &gt; Connectors &gt; Browse connectors &gt; Gmail &gt; "Add to your team".</li>
-<li>Open its <strong>Tool permissions</strong> and set the <strong>write/delete group</strong> to <strong>Blocked</strong>.</li>
+<li>Go to Organization settings &gt; Connectors &gt; Browse connectors &gt; Gmail &gt; "Add to your team" (<a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_b6f69dbd72" target="_blank" rel="noopener">11176164</a>).</li>
+<li>Open its <strong>Tool permissions</strong> and set the <strong>write/delete group</strong> to <strong>Blocked</strong> (<a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9fa8289074" target="_blank" rel="noopener">11176164</a>).</li>
 <li>Also Block each write tool: <code>send_message</code>, <code>reply</code>, <code>forward</code>, <code>create_draft</code>, <code>update_draft</code>, <code>trash_message</code>, <code>trash_thread</code>, <code>mark_message_spam</code>, <code>mark_thread_spam</code>, <code>label_message</code>, <code>label_thread</code>, <code>unlabel_message</code>, <code>unlabel_thread</code>, <code>create_label</code>, <code>update_label</code>, <code>delete_label</code> (community-observed names).</li>
 <li>Set read tools to Always allow or Needs approval.</li>
-<li><strong>Enterprise:</strong> turn on Organization settings &gt; Organization and access &gt; <strong>Restrict verified-domain connectors to your enterprise</strong>.</li>
+<li><strong>Enterprise:</strong> turn on Organization settings &gt; Organization and access &gt; <strong>Restrict verified-domain connectors to your enterprise</strong> (<a href="https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise#h_b46cb1be33" target="_blank" rel="noopener">15402193</a>).</li>
 <li><strong>[GWA]</strong> Ask the Workspace admins to set "Claude for Gmail" to Trusted for our OUs (<a href="#rb-google-workspace-admin--2-set-the-access-level-for-claude-for-gmail">runbook</a>).</li>
 <li>Re-check the tool list after Anthropic releases. New tools' default is undocumented.</li>
 </ol>
 <h2 id="rb-claude-org--route-b-read-only-proxy-or-google-gmail-mcp-as-custom-connector">Route B: read-only proxy or Google Gmail MCP as custom connector</h2>
 <p>Google enforces read-only: the token only holds <code>gmail.readonly</code>. Deploy the guard first (<a href="#deploy">DEPLOY.md</a>), or set up Google's Gmail MCP.</p>
 <ol>
-<li>Go to Organization settings &gt; Connectors &gt; Add &gt; Custom &gt; Web.</li>
-<li>Enter the guard's URL (e.g. <code>https://gmail-guard.example.com/mcp</code>) or Google's <code>https://gmailmcp.googleapis.com/mcp/v1</code>. Sign-in: "Sign in when needed".</li>
+<li>Go to Organization settings &gt; Connectors &gt; Add &gt; Custom &gt; Web (<a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp#h_2164f9101b" target="_blank" rel="noopener">11175166</a>).</li>
+<li>Enter the guard's URL (e.g. <code>https://gmail-guard.example.com/mcp</code>) or Google's <code>https://gmailmcp.googleapis.com/mcp/v1</code> (<a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#claude" target="_blank" rel="noopener">Configure Gmail MCP</a>). Sign-in: "Sign in when needed" (<a href="https://claude.com/docs/connectors/custom/add-unlisted#choose-authentication-settings" target="_blank" rel="noopener">authentication settings</a>).</li>
 <li>Pick the OAuth client:
-   - <strong>Guard:</strong> "Use Claude's published identity" (CIMD, recommended; the guard holds it to Claude's callbacks). "Register automatically" also works.
-   - <strong>Google's Gmail MCP:</strong> "Use your own OAuth client", with client ID and secret under Advanced.</li>
-<li>Tool policy: guard tools are all read, so Always allow. For Google's Gmail MCP, <strong>Block</strong> <code>create_draft</code>, <code>label_message</code>, <code>label_thread</code>, <code>unlabel_message</code>, <code>unlabel_thread</code>, <code>create_label</code>.</li>
-<li>Remove the directory Gmail connector. Team: decline and block member requests for it. Enterprise: Block Gmail in every custom role and turn on Restrict verified-domain connectors.</li>
+   - <strong>Guard:</strong> <a href="https://claude.com/docs/connectors/custom/add-unlisted#choose-authentication-settings" target="_blank" rel="noopener">"Use Claude's published identity"</a> (CIMD, recommended; the guard holds it to Claude's callbacks). "Register automatically" also works.
+   - <strong>Google's Gmail MCP:</strong> "Use your own OAuth client", with client ID and secret under Advanced (<a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#claude" target="_blank" rel="noopener">Configure Gmail MCP</a>).</li>
+<li>Tool policy: guard tools are all read, so Always allow. For Google's Gmail MCP (<a href="https://developers.google.com/workspace/gmail/api/reference/mcp#toolsets" target="_blank" rel="noopener">tool list</a>), <strong>Block</strong> <code>create_draft</code>, <code>label_message</code>, <code>label_thread</code>, <code>unlabel_message</code>, <code>unlabel_thread</code>, <code>create_label</code>.</li>
+<li>Remove the directory Gmail connector. Team: <a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9213598058" target="_blank" rel="noopener">decline and block</a> member requests for it. Enterprise: <a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans#h_fb6a5a0907" target="_blank" rel="noopener">Block Gmail in every custom role</a> and turn on Restrict verified-domain connectors.</li>
 <li><strong>[GWA]</strong> Ask the Workspace admins to Block "Claude for Gmail" and allow only our read-only OAuth client (<a href="#rb-google-workspace-admin">runbook</a>).</li>
 </ol>
 <p>Notes:</p>
 <ul>
-<li><strong>Authentication settings can't be changed after adding the connector.</strong> Remove and re-add it; every member then reconnects (<a href="https://claude.com/docs/connectors/custom/add-unlisted.md" target="_blank" rel="noopener">add an unlisted connector</a>).</li>
-<li>OAuth callback: <code>https://claude.ai/api/mcp/auth_callback</code>. The server must be reachable from Anthropic's cloud, or use <a href="https://claude.com/docs/connectors/mcp-tunnels/overview.md" target="_blank" rel="noopener">MCP tunnels</a>.</li>
+<li><strong>Authentication settings can't be changed after adding the connector.</strong> Remove and re-add it; every member then reconnects (<a href="https://claude.com/docs/connectors/custom/add-unlisted#edit-or-remove-a-connector" target="_blank" rel="noopener">add an unlisted connector</a>).</li>
+<li>OAuth callback: <code>https://claude.ai/api/mcp/auth_callback</code> (<a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#claude" target="_blank" rel="noopener">Configure Gmail MCP</a>). The server must be <a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp#h_b66e88c454" target="_blank" rel="noopener">reachable from Anthropic's cloud</a>, or use <a href="https://claude.com/docs/connectors/mcp-tunnels/overview" target="_blank" rel="noopener">MCP tunnels</a>.</li>
 <li>For Claude Code, see <a href="#rb-claude-code-managed-settings">claude-code-managed-settings.md</a>.</li>
 </ul>
 <h2 id="rb-claude-org--claude-desktop-managed-policies">Claude Desktop managed policies</h2>
-<p>Set through MDM (<a href="https://support.claude.com/en/articles/12622667-enterprise-configuration-for-claude-desktop" target="_blank" rel="noopener">12622667</a>):</p>
+<p>Set through MDM (<a href="https://support.claude.com/en/articles/12622667-enterprise-configuration-for-claude-desktop#h_003283c7cb" target="_blank" rel="noopener">12622667</a>):</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -1152,11 +1156,11 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 </tr>
 </tbody>
 </table></div>
-<p>Enterprise also has the first two under Organization settings &gt; Plugins &gt; Connectors. Remote connectors in Desktop go through claude.ai, so the org tool policy applies.</p>
+<p>Enterprise also has the first two under <a href="https://support.claude.com/en/articles/12622667-enterprise-configuration-for-claude-desktop#h_21135034c8" target="_blank" rel="noopener">Organization settings &gt; Plugins &gt; Connectors</a>. Remote connectors in Desktop <a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp#h_2030bc30a2" target="_blank" rel="noopener">go through claude.ai</a>, so the org tool policy applies.</p>
 <h2 id="rb-claude-org--personal-accounts">Personal accounts</h2>
 <p>Claude org settings don't govern a member's personal Claude account.</p>
 <ul>
-<li><strong>Enterprise:</strong> the verified-domain restriction closes this for Gmail.</li>
+<li><strong>Enterprise:</strong> the <a href="https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise#h_154f8902a3" target="_blank" rel="noopener">verified-domain restriction</a> closes this for Gmail.</li>
 <li><strong>Team:</strong> only blocking "Claude for Gmail" at Google closes it [GWA]. That also blocks our built-in connector, so Gmail must go through Route B.</li>
 </ul>
 <h2 id="rb-claude-org--payhawk">Payhawk</h2>
@@ -1165,11 +1169,11 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <h2 id="rb-claude-code-managed-settings--steps">Steps</h2>
 <ol>
 <li>Write <code>managed-settings.json</code> from the <a href="#rb-claude-code-managed-settings--example-proxy-route">example</a> below, with our real URLs.</li>
-<li>Push it with MDM, or copy it to:
+<li>Push it with MDM, or copy it to (<a href="https://code.claude.com/docs/en/managed-settings#deploy-a-managed-settings-file" target="_blank" rel="noopener">managed settings</a>):
    - macOS: <code>/Library/Application Support/ClaudeCode/managed-settings.json</code>
    - Linux and WSL: <code>/etc/claude-code/managed-settings.json</code>
    - Windows: <code>C:\Program Files\ClaudeCode\managed-settings.json</code></li>
-<li>Owners: set the same settings as server-managed settings in claude.ai.</li>
+<li>Owners: set the same settings as <a href="https://code.claude.com/docs/en/server-managed-settings#configure-server-managed-settings" target="_blank" rel="noopener">server-managed settings</a> in claude.ai.</li>
 <li><a href="#rb-claude-code-managed-settings--verify">Verify</a> on one machine.</li>
 </ol>
 <h2 id="rb-claude-code-managed-settings--which-sessions-each-delivery-method-reaches">Which sessions each delivery method reaches</h2>
@@ -1185,16 +1189,16 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <tr>
 <td><strong>Server-managed</strong></td>
 <td>Owners, in claude.ai</td>
-<td>Only sessions signed in with a Team or Enterprise claude.ai login. Refreshed hourly</td>
+<td>Only sessions authenticated to our Team or Enterprise org: a claude.ai login, or a <code>CLAUDE_CODE_OAUTH_TOKEN</code> made for it (<a href="https://code.claude.com/docs/en/server-managed-settings#platform-availability" target="_blank" rel="noopener">platform availability</a>). <a href="https://code.claude.com/docs/en/server-managed-settings#fetch-and-caching-behavior" target="_blank" rel="noopener">Refreshed hourly</a></td>
 </tr>
 <tr>
 <td><strong>Endpoint-managed</strong> (MDM, registry, <code>managed-settings.json</code>)</td>
 <td>IT</td>
-<td>Every session; "stronger security guarantees" (<a href="https://code.claude.com/docs/en/server-managed-settings.md" target="_blank" rel="noopener">server-managed-settings.md</a>)</td>
+<td>Every session on the device (not cloud sessions in Anthropic-hosted environments); "stronger security guarantees" (<a href="https://code.claude.com/docs/en/server-managed-settings#choose-between-server-managed-and-endpoint-managed-settings" target="_blank" rel="noopener">server-managed-settings.md</a>)</td>
 </tr>
 </tbody>
 </table></div>
-<p>Sessions using an API key, auth token, <code>apiKeyHelper</code>, a third-party provider or the <a href="https://docs.nexos.ai/gateway-api/integrations/claude-code.md" target="_blank" rel="noopener">nexos.ai gateway</a> get no server-managed settings and no claude.ai connectors (<a href="https://code.claude.com/docs/en/mcp.md#use-mcp-servers-from-claude-ai" target="_blank" rel="noopener">mcp.md</a>). <strong>Use both</strong>: without MDM, a member escapes the controls by switching to an API key.</p>
+<p>Sessions using a Console API key (they get that Console org's settings, not ours), a third-party provider, a custom <code>ANTHROPIC_BASE_URL</code> or the <a href="https://docs.nexos.ai/gateway-api/integrations/claude-code#id-2.-connect-claude-code-to-nexos.ai" target="_blank" rel="noopener">nexos.ai gateway</a> get none of our server-managed settings (<a href="https://code.claude.com/docs/en/server-managed-settings#security-considerations" target="_blank" rel="noopener">security considerations</a>) and no claude.ai connectors (<a href="https://code.claude.com/docs/en/mcp#use-mcp-servers-from-claude-ai" target="_blank" rel="noopener">mcp.md</a>). <strong>Use both</strong>: without MDM, a member escapes the controls by switching to an API key.</p>
 <h2 id="rb-claude-code-managed-settings--controls">Controls</h2>
 <div class="table-wrap"><table>
 <thead>
@@ -1206,39 +1210,39 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <tbody>
 <tr>
 <td>Org tool policy (<a href="#rb-claude-org">claude.ai</a>)</td>
-<td><code>blocked</code> tools are removed; <code>ask</code> prompts every call. Desktop local and SSH sessions only get <code>blocked</code></td>
+<td><code>blocked</code> tools are removed; <code>ask</code> prompts every call. Desktop local and SSH sessions only get <code>blocked</code> (<a href="https://code.claude.com/docs/en/mcp#organization-controls-on-connector-tools" target="_blank" rel="noopener">mcp.md</a>)</td>
 </tr>
 <tr>
 <td><code>permissions.deny</code></td>
-<td>Any level's deny wins; managed rules can't be overridden. <code>allowManagedPermissionRulesOnly</code> ignores non-managed rules. <code>mcp__</code> rules with parentheses are skipped (<a href="https://code.claude.com/docs/en/permissions.md" target="_blank" rel="noopener">permissions.md</a>)</td>
+<td>Any level's deny wins; managed rules can't be overridden (<a href="https://code.claude.com/docs/en/permissions#settings-precedence" target="_blank" rel="noopener">permissions.md</a>). <code>allowManagedPermissionRulesOnly</code> ignores non-managed rules (<a href="https://code.claude.com/docs/en/permissions#managed-settings" target="_blank" rel="noopener">managed settings</a>). <code>mcp__</code> rules with parentheses are skipped (<a href="https://code.claude.com/docs/en/permissions#match-by-input-parameter" target="_blank" rel="noopener">permissions.md</a>)</td>
 </tr>
 <tr>
 <td><code>allowManagedMcpServersOnly</code> + <code>allowedMcpServers</code>, <code>deniedMcpServers</code></td>
-<td>Only allowlisted servers load; the denylist always wins. <code>serverName</code> is "not a security control"; use <code>serverUrl</code> (<a href="https://code.claude.com/docs/en/managed-mcp.md" target="_blank" rel="noopener">managed-mcp.md</a>)</td>
+<td>Only allowlisted servers load; the denylist always wins (<a href="https://code.claude.com/docs/en/managed-mcp#how-a-server-is-evaluated" target="_blank" rel="noopener">managed-mcp.md</a>). <code>serverName</code> is "not a security control"; use <code>serverUrl</code> (<a href="https://code.claude.com/docs/en/managed-mcp#how-servername-entries-match" target="_blank" rel="noopener">managed-mcp.md</a>)</td>
 </tr>
 <tr>
 <td><code>managed-mcp.json</code></td>
-<td>Loads only listed servers, hides claude.ai connectors unless <code>allowAllClaudeAiMcps: true</code>. MDM only</td>
+<td>Loads only listed servers, hides claude.ai connectors unless <code>allowAllClaudeAiMcps: true</code> (<a href="https://code.claude.com/docs/en/managed-mcp#allow-claude-ai-connectors-alongside-the-managed-set" target="_blank" rel="noopener">managed-mcp.md</a>). <a href="https://code.claude.com/docs/en/managed-mcp#deploy-managed-mcp-json" target="_blank" rel="noopener">MDM only</a></td>
 </tr>
 <tr>
 <td><code>managedMcpServers</code></td>
-<td>Gives a server to every user</td>
+<td>Gives a server to every user (<a href="https://code.claude.com/docs/en/managed-mcp#provide-servers-through-managed-settings" target="_blank" rel="noopener">managed-mcp.md</a>)</td>
 </tr>
 <tr>
 <td><code>oauth.scopes</code></td>
-<td>Pins scopes for a user-added OAuth server</td>
+<td>Pins scopes for a user-added OAuth server (<a href="https://code.claude.com/docs/en/mcp#restrict-oauth-scopes" target="_blank" rel="noopener">mcp.md</a>)</td>
 </tr>
 <tr>
 <td><code>PreToolUse</code> hook + <code>allowManagedHooksOnly</code></td>
-<td>Can deny any call; can't override a deny rule</td>
+<td>Can deny any call; can't override a deny rule (<a href="https://code.claude.com/docs/en/permissions#extend-permissions-with-hooks" target="_blank" rel="noopener">permissions.md</a>, <a href="https://code.claude.com/docs/en/hooks#hook-locations" target="_blank" rel="noopener">hooks.md</a>)</td>
 </tr>
 <tr>
 <td><code>disableClaudeAiConnectors: true</code></td>
-<td>Turns off claude.ai connectors</td>
+<td>Turns off claude.ai connectors (<a href="https://code.claude.com/docs/en/mcp#disable-claude-ai-connectors" target="_blank" rel="noopener">mcp.md</a>)</td>
 </tr>
 </tbody>
 </table></div>
-<figure><a href="../images/claude-code-org-connector-controls.png" target="_blank" rel="noopener"><img src="../images/claude-code-org-connector-controls.png" alt="How Claude Code applies the org's blocked and ask settings" width="1400" height="574" style="aspect-ratio:1400/574" loading="lazy"></a><figcaption>Source: <a href="https://code.claude.com/docs/en/mcp.md#organization-controls-on-connector-tools" target="_blank" rel="noopener">Claude Code docs, MCP</a>, captured 2026-11-08.</figcaption></figure>
+<figure><a href="../images/claude-code-org-connector-controls.png" target="_blank" rel="noopener"><img src="../images/claude-code-org-connector-controls.png" alt="How Claude Code applies the org's blocked and ask settings" width="1400" height="574" style="aspect-ratio:1400/574" loading="lazy"></a><figcaption>Source: <a href="https://code.claude.com/docs/en/mcp#organization-controls-on-connector-tools" target="_blank" rel="noopener">Claude Code docs, MCP</a>, captured 2026-11-08.</figcaption></figure>
 <h2 id="rb-claude-code-managed-settings--example-proxy-route">Example: proxy route</h2>
 <p>Only the read-only proxies load; the built-in Gmail connector, Google's Gmail MCP and the direct Payhawk MCP are denied; Gmail write tools are denied on every server.</p>
 <pre><code class="language-json">{
@@ -1264,9 +1268,9 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 </code></pre>
 <ul>
 <li><strong>Built-in route:</strong> keep only the <code>allowManagedPermissionRulesOnly</code> and <code>permissions</code> part as a second layer behind the org Blocked policy. claude.ai tools are named <code>mcp__claude_ai_Gmail__&lt;tool&gt;</code> (<a href="#findings--31-what-the-connector-exposes">findings 3.1</a>).</li>
-<li>Keep <code>allowManagedMcpServersOnly</code> in the managed file, or allowlists merge from every scope, including the user's.</li>
-<li>The guard's <code>serverUrl</code> entry also admits its claude.ai custom connector, since fetched connectors are checked by URL.</li>
-<li><code>deniedMcpServers</code> accepts a claude.ai display name, but names can change. <code>allowedMcpServers</code> needs <code>serverUrl</code>.</li>
+<li>Keep <code>allowManagedMcpServersOnly</code> in the managed file, or <a href="https://code.claude.com/docs/en/managed-mcp#policy-based-control-with-allowlists-and-denylists" target="_blank" rel="noopener">allowlists merge from every scope</a>, including the user's.</li>
+<li>The guard's <code>serverUrl</code> entry also admits its claude.ai custom connector, since fetched connectors are <a href="https://code.claude.com/docs/en/managed-mcp#how-servername-entries-match" target="_blank" rel="noopener">checked by URL</a>.</li>
+<li><code>deniedMcpServers</code> accepts a claude.ai display name, but names can change. <code>allowedMcpServers</code> needs <code>serverUrl</code> (<a href="https://code.claude.com/docs/en/managed-mcp#how-servername-entries-match" target="_blank" rel="noopener">managed-mcp.md</a>).</li>
 <li>Use <code>mcp__*__</code> globs. Desktop's Code tab mounts connectors under UUIDs, so <code>mcp__claude_ai_Gmail__*</code> doesn't match there (<strong>Community</strong>, <a href="https://github.com/anthropics/claude-code/issues/92787" target="_blank" rel="noopener">#92787</a>). The org Blocked policy is the reliable control for Desktop.</li>
 </ul>
 <h2 id="rb-claude-code-managed-settings--example-provide-the-proxy-to-every-user">Example: provide the proxy to every user</h2>
@@ -1276,9 +1280,9 @@ docker build -t mcp-guard .  # runs the tests in its test stage
   }
 }
 </code></pre>
-<p>Needs Claude Code v2.1.259+ and an <code>https://</code> URL; no <code>command</code>, <code>args</code>, <code>env</code>, <code>headersHelper</code> or <code>${VAR}</code>. Claude Desktop's setting of the same name has a different shape. For a user-added server, pin scopes in <code>.mcp.json</code> with <code>"oauth": { "scopes": "https://www.googleapis.com/auth/gmail.readonly" }</code>.</p>
+<p><a href="https://code.claude.com/docs/en/managed-mcp#provide-servers-through-managed-settings" target="_blank" rel="noopener">Needs Claude Code v2.1.259+</a> and an <code>https://</code> URL; no <code>command</code>, <code>args</code>, <code>env</code>, <code>headersHelper</code> or <code>${VAR}</code>. Claude Desktop's setting of the same name has a different shape (<a href="https://code.claude.com/docs/en/managed-mcp#what-an-entry-can-contain" target="_blank" rel="noopener">what an entry can contain</a>). For a user-added server, <a href="https://code.claude.com/docs/en/mcp#restrict-oauth-scopes" target="_blank" rel="noopener">pin scopes</a> in <code>.mcp.json</code> with <code>"oauth": { "scopes": "https://www.googleapis.com/auth/gmail.readonly" }</code>.</p>
 <h2 id="rb-claude-code-managed-settings--example-managed-pretooluse-hook">Example: managed PreToolUse hook</h2>
-<p>Optional backstop for write-shaped names the deny list misses (<a href="https://code.claude.com/docs/en/hooks.md" target="_blank" rel="noopener">hooks.md</a>).</p>
+<p>Optional backstop for write-shaped names the deny list misses (<a href="https://code.claude.com/docs/en/hooks#pretooluse-decision-control" target="_blank" rel="noopener">hooks.md</a>).</p>
 <pre><code class="language-json">{
   &quot;allowManagedHooksOnly&quot;: true,
   &quot;hooks&quot;: {
@@ -1294,19 +1298,19 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 </code></pre>
 <h2 id="rb-claude-code-managed-settings--verify">Verify</h2>
 <ul>
-<li><code>/mcp</code> and <code>claude mcp list</code>: a blocked server doesn't appear.</li>
-<li><code>claude doctor</code>: shows resolved settings and skipped rules.</li>
-<li><code>claude mcp add</code> with a blocked URL fails with <code>not allowed by enterprise policy</code> or <code>explicitly blocked by enterprise policy</code>.</li>
+<li><code>/mcp</code> and <code>claude mcp list</code>: a blocked server doesn't appear (<a href="https://code.claude.com/docs/en/managed-mcp#how-restrictions-appear-to-users" target="_blank" rel="noopener">managed-mcp.md</a>).</li>
+<li><code>claude doctor</code>: shows resolved settings and <a href="https://code.claude.com/docs/en/permissions#match-by-input-parameter" target="_blank" rel="noopener">skipped rules</a>.</li>
+<li><code>claude mcp add</code> with a blocked URL fails with <code>not allowed by enterprise policy</code> or <code>explicitly blocked by enterprise policy</code> (<a href="https://code.claude.com/docs/en/managed-mcp#how-restrictions-appear-to-users" target="_blank" rel="noopener">managed-mcp.md</a>).</li>
 </ul></div></details><details class="runbook" id="rb-payhawk"><summary>Runbook: Payhawk MCP<span class="tag">runbook</span></summary><div class="doc-body"><p class="src-note" style="color:var(--muted);font-size:.85rem;margin:4px 0 0">Source: <code>docs/runbooks/payhawk.md</code></p>
-<p>For Claude Owners and Payhawk admins: give AI assistants read-only Payhawk access. Background: <a href="#findings--65-payhawk-mcp">findings.md</a>. Checked on 2026-11-08 against Payhawk's <a href="https://payhawk.com/help/payhawk-mcp-overview.md" target="_blank" rel="noopener">About</a>, <a href="https://payhawk.com/help/connecting-payhawk-mcp.md" target="_blank" rel="noopener">Connecting</a>, <a href="https://payhawk.com/help/payhawk-mcp-tool-reference.md" target="_blank" rel="noopener">Tool reference</a>, <a href="https://payhawk.com/help/faq-on-the-payhawk-mcp.md" target="_blank" rel="noopener">FAQ</a>, <a href="https://payhawk.com/help/troubleshooting-the-payhawk-mcp.md" target="_blank" rel="noopener">Troubleshooting</a>, <a href="https://payhawk.com/help/overview-of-the-payhawk-developer-api.md" target="_blank" rel="noopener">Developer API</a>.</p>
+<p>For Claude Owners and Payhawk admins: give AI assistants read-only Payhawk access. Background: <a href="#findings--65-payhawk-mcp">findings.md</a>. Checked on 2026-11-08 against Payhawk's <a href="https://payhawk.com/help/payhawk-mcp-overview" target="_blank" rel="noopener">About</a>, <a href="https://payhawk.com/help/connecting-payhawk-mcp" target="_blank" rel="noopener">Connecting</a>, <a href="https://payhawk.com/help/payhawk-mcp-tool-reference" target="_blank" rel="noopener">Tool reference</a>, <a href="https://payhawk.com/help/faq-on-the-payhawk-mcp" target="_blank" rel="noopener">FAQ</a>, <a href="https://payhawk.com/help/troubleshooting-the-payhawk-mcp" target="_blank" rel="noopener">Troubleshooting</a>, <a href="https://payhawk.com/help/overview-of-the-payhawk-developer-api" target="_blank" rel="noopener">Developer API</a>.</p>
 <h2 id="rb-payhawk--key-facts">Key facts</h2>
 <ul>
-<li><strong>Server:</strong> <code>https://mcp.payhawk.com/mcp</code>. Each user signs in with their own Payhawk login, so Payhawk roles apply. Sessions last 7 days unused, 30 at most.</li>
-<li><strong>Only listed apps can sign in</strong> (Claude, Claude Code, ChatGPT, Cursor and others); others fail with <code>host-not-allowed</code>. <strong>nexos.ai is not listed.</strong></li>
-<li><strong>Write tools</strong> need user confirmation (a prompt, not a read-only mode). The MCP "never starts a payment or a transfer".</li>
-<li><strong>API keys</strong> are Full access or Read-only, account-wide, 15 requests/s.</li>
+<li><strong>Server:</strong> <code>https://mcp.payhawk.com/mcp</code>. Each user signs in with their own Payhawk login, so Payhawk roles apply. Sessions last 7 days unused, 30 at most (<a href="https://payhawk.com/help/connecting-payhawk-mcp#before-you-start" target="_blank" rel="noopener">Connecting</a>).</li>
+<li><a href="https://payhawk.com/help/connecting-payhawk-mcp#supported-ai-assistants" target="_blank" rel="noopener"><strong>Only listed apps can sign in</strong></a> (Claude, Claude Code, ChatGPT, Cursor and others); others <a href="https://payhawk.com/help/troubleshooting-the-payhawk-mcp#sign-in-fails-host-not-allowed" target="_blank" rel="noopener">fail with <code>host-not-allowed</code></a>. <strong>nexos.ai is not listed.</strong></li>
+<li><strong>Write tools</strong> need <a href="https://payhawk.com/help/payhawk-mcp-tool-reference#:~:text=They%20always%20show%20a%20preview%20and%20need%20your%20confirmation" target="_blank" rel="noopener">user confirmation</a> (a prompt, not a read-only mode). The MCP <a href="https://payhawk.com/help/payhawk-mcp-overview#keeping-your-data-safe" target="_blank" rel="noopener">"never starts a payment or a transfer"</a>.</li>
+<li><strong>API keys</strong> are <a href="https://payhawk.com/help/overview-of-the-payhawk-developer-api#h_8996f3095d" target="_blank" rel="noopener">Full access or Read-only, account-wide</a>, <a href="https://payhawk.com/help/overview-of-the-payhawk-developer-api#h_8ef888c8ee" target="_blank" rel="noopener">15 requests/s</a>.</li>
 </ul>
-<figure><a href="../images/payhawk-supported-clients.png" target="_blank" rel="noopener"><img src="../images/payhawk-supported-clients.png" alt="Payhawk accepts sign-ins only from the listed AI apps; nexos.ai is not listed" width="1400" height="1983" style="aspect-ratio:1400/1983" loading="lazy"></a><figcaption>Source: <a href="https://payhawk.com/help/connecting-payhawk-mcp.md" target="_blank" rel="noopener">Payhawk Help Center, Connecting Payhawk to your AI Assistant</a>, captured 2026-11-08.</figcaption></figure>
+<figure><a href="../images/payhawk-supported-clients.png" target="_blank" rel="noopener"><img src="../images/payhawk-supported-clients.png" alt="Payhawk accepts sign-ins only from the listed AI apps; nexos.ai is not listed" width="1400" height="1983" style="aspect-ratio:1400/1983" loading="lazy"></a><figcaption>Source: <a href="https://payhawk.com/help/connecting-payhawk-mcp#supported-ai-assistants" target="_blank" rel="noopener">Payhawk Help Center, Connecting Payhawk to your AI Assistant</a>, captured 2026-11-08.</figcaption></figure>
 <h2 id="rb-payhawk--options">Options</h2>
 <div class="table-wrap"><table>
 <thead>
@@ -1341,21 +1345,21 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <p><strong>Recommendation:</strong> Option A if only Claude needs Payhawk. Option B for nexos or a credential-level guarantee.</p>
 <h2 id="rb-payhawk--option-a-steps-claude-only">Option A steps (Claude only)</h2>
 <ol>
-<li>Organization settings &gt; Connectors &gt; Add custom connector: URL <code>https://mcp.payhawk.com/mcp</code>, OAuth client "Register automatically".</li>
+<li>Organization settings &gt; Connectors &gt; Add custom connector: URL <code>https://mcp.payhawk.com/mcp</code>, OAuth client "Register automatically" (<a href="https://payhawk.com/help/connecting-payhawk-mcp#connecting-to-claude" target="_blank" rel="noopener">Connecting to Claude</a>).</li>
 <li>In its tool permissions, set every <strong>Write</strong> and <strong>Ambiguous</strong> tool (table below) to <strong>Blocked</strong>. Read tools: Always allow or Needs approval.</li>
 <li>Members connect with their own Payhawk login.</li>
 <li>For Claude Code sessions not logged in to claude.ai, see <a href="#rb-claude-code-managed-settings">claude-code-managed-settings.md</a>.</li>
 </ol>
 <h2 id="rb-payhawk--option-b-steps-proxy">Option B steps (proxy)</h2>
 <ol>
-<li><strong>Start early:</strong> email support@payhawk.com asking them to allow the proxy's redirect URI (e.g. <code>https://payhawk-ro.example.com/auth/callback</code>).</li>
+<li><strong>Start early:</strong> <a href="https://payhawk.com/help/troubleshooting-the-payhawk-mcp#sign-in-fails-host-not-allowed" target="_blank" rel="noopener">email support@payhawk.com</a> asking them to allow the proxy's redirect URI (e.g. <code>https://payhawk-ro.example.com/auth/callback</code>).</li>
 <li>Once allowed, deploy the proxy in front of <code>https://mcp.payhawk.com/mcp</code> (<a href="#proxy-design--payhawk">proxy-design.md</a>).</li>
 <li>Call <code>tools/list</code> once and record each tool's <code>annotations</code> and input schema.</li>
 <li>Allowlist only the Read tools below; everything else is denied.</li>
 <li>If Payhawk declines, choose Option C or Option A.</li>
 </ol>
 <h2 id="rb-payhawk--tool-classification-82-tools">Tool classification (82 tools)</h2>
-<p><strong>Inferred from the names</strong> plus Payhawk's rule that read tools "never change anything". <strong>Deny anything unclear.</strong></p>
+<p><strong>Inferred from the <a href="https://payhawk.com/help/payhawk-mcp-tool-reference#full-list-of-supported-payhawk-mcp-tools" target="_blank" rel="noopener">names</a></strong> plus Payhawk's rule that read tools <a href="https://payhawk.com/help/payhawk-mcp-tool-reference#:~:text=They%20never%20change%20anything" target="_blank" rel="noopener">"never change anything"</a>. <strong>Deny anything unclear.</strong></p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -1438,7 +1442,8 @@ uv run python -m tests.fakes.run_local --hd ''                # as a non-Workspa
 <pre><code class="language-bash">claude mcp add --transport http gmail-local http://localhost:3000/mcp
 claude            # then /mcp &gt; gmail-local &gt; Authenticate
 </code></pre>
-<p>Choose Allow Access on the consent page. Claude Code sees six read-only tools; ask it to search
+<p>See <a href="https://code.claude.com/docs/en/mcp#authenticate-with-remote-mcp-servers" target="_blank" rel="noopener">Claude Code's MCP sign-in</a>. Choose Allow Access on the
+consent page. Claude Code sees six read-only tools; ask it to search
 for "invoice". Remove it with <code>claude mcp remove gmail-local</code>.</p>
 <h3 id="local-development--with-a-personal-key">With a personal key</h3>
 <p>Open <code>http://localhost:3000/keys</code>, choose <strong>Sign in and create a key</strong>, and use the key from any
@@ -1530,7 +1535,7 @@ checked.</p>
 <tbody>
 <tr>
 <td><code>search_threads</code></td>
-<td><code>threads.list</code> (Gmail search syntax, up to 50 per page)</td>
+<td><code>threads.list</code> (<a href="https://support.google.com/mail/answer/7190" target="_blank" rel="noopener">Gmail search syntax</a>, up to 50 per page)</td>
 </tr>
 <tr>
 <td><code>get_thread</code></td>
@@ -1554,7 +1559,11 @@ checked.</p>
 </tr>
 </tbody>
 </table></div>
-<p>Bodies are cut at 20,000 characters; attachments are listed, never fetched. The names match
+<p>A body comes back at most 20,000 characters at a time; a longer one says <code>truncated: true</code> and
+<code>next_body_offset</code>, which <code>get_message</code> and <code>get_draft</code> take as <code>body_offset</code> to read on.
+Attachments are listed (name, type, size); their contents are never read. A Gmail rate limit or
+brief outage (429, 5xx, or a <a href="https://developers.google.com/workspace/gmail/api/guides/handle-errors#rate-limit" target="_blank" rel="noopener">403 rate-limit reason</a>) is <a href="https://developers.google.com/workspace/gmail/api/guides/handle-errors#exponential-backoff" target="_blank" rel="noopener">retried</a> up to three times in all, waiting
+0.5 s then 1 s, or <code>Retry-After</code> when it is at most 5 s. The names match
 Gmail MCP's read-only tools, so <code>allow</code> is the same for both upstreams.</p>
 <h3 id="configuration--pins">Pins</h3>
 <p>A pin is the sha256 of a tool's name, description and input schema. If an <code>mcp</code> upstream changes
@@ -1617,11 +1626,14 @@ real Google sign-in. <strong>Open</strong> marks what still needs a decision or 
 one, gateway or not. Someone with Google Cloud access in the example.com organisation creates:</p>
 <ol>
 <li><strong>A Google Cloud project owned by the organisation</strong> (or an existing internal one); otherwise
-   Internal isn't offered.</li>
+   <a href="https://support.google.com/cloud/answer/15549945#user-type-internal" target="_blank" rel="noopener">Internal isn't offered</a>.</li>
 <li><strong>OAuth consent screen, user type Internal</strong> (Google Auth Platform &gt; Audience). Only example.com
-   accounts can sign in, and the restricted <code>gmail.readonly</code> scope needs no Google verification.</li>
+   accounts can sign in, and the <a href="https://developers.google.com/workspace/gmail/api/auth/scopes#restricted-scopes" target="_blank" rel="noopener">restricted</a> <code>gmail.readonly</code> scope
+   <a href="https://support.google.com/cloud/answer/13464323#:~:text=Internal%20Use%20apps,designated%20as%20internal%2Donly" target="_blank" rel="noopener">needs no Google verification</a>.</li>
 <li><strong>OAuth client ID, type Web application</strong>, with redirect URIs <code>https://&lt;guard&gt;/auth/callback</code>
-   and, if personal keys are on, <code>https://&lt;guard&gt;/keys/callback</code>. No JavaScript origins.</li>
+   and, if personal keys are on, <code>https://&lt;guard&gt;/keys/callback</code>. No JavaScript origins. Decide
+   on <a href="https://support.google.com/cloud/answer/15549257#agentic-client" target="_blank" rel="noopener"><strong>Use this client for an AI-powered agent</strong></a> when creating it
+   (<a href="#questions">questions.md</a>, question 13).</li>
 <li><strong>Gmail API enabled</strong> (<code>gmail.googleapis.com</code>). Gmail MCP also needs <code>gmailmcp.googleapis.com</code>
    enabled and the client marked <strong>Use this client for an AI-powered agent</strong>
    (<a href="#readme--gmail-api-or-gmail-mcp">README</a>).</li>
@@ -1630,10 +1642,11 @@ one, gateway or not. Someone with Google Cloud access in the example.com organis
 <p>Then a <strong>Google Workspace admin</strong> (<a href="#rb-google-workspace-admin">runbook</a>):</p>
 <ol start="5">
 <li>Admin console &gt; Security &gt; Access and data control &gt; <strong>API controls</strong> &gt; Manage Third-Party App
-   Access &gt; Configure new app &gt; search by <strong>client ID</strong> &gt; <strong>Specific Google data</strong> with only
+   Access &gt; <a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#configure-a-new-app" target="_blank" rel="noopener">Configure new app</a> &gt; search by <strong>client ID</strong> &gt; <strong>Specific Google data</strong> with only
    <code>gmail.readonly</code> plus the sign-in scopes (or <strong>Trusted</strong>), for the OUs that use the guard.</li>
-<li>Set Anthropic's "Claude for Gmail" and nexos.ai's Gmail app to <strong>Blocked</strong>, if Gmail should be
-   reachable only read-only. Coordinate first: this revokes those apps' existing tokens.</li>
+<li>Set Anthropic's "Claude for Gmail" and nexos.ai's Gmail app to <a href="https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data#trustorlimit" target="_blank" rel="noopener"><strong>Blocked</strong></a>, if Gmail should be
+   reachable only read-only. A Blocked app can't reach any Google service, so people lose those
+   apps' Gmail features at once; coordinate first.</li>
 </ol>
 <h3 id="deploy--scopes">Scopes</h3>
 <p>Add these on the consent screen (Google Auth Platform &gt; Data access); nothing else.</p>
@@ -1658,7 +1671,7 @@ one, gateway or not. Someone with Google Cloud access in the example.com organis
 </tr>
 <tr>
 <td><code>https://www.googleapis.com/auth/gmail.readonly</code></td>
-<td>Restricted</td>
+<td><a href="https://developers.google.com/workspace/gmail/api/auth/scopes#restricted-scopes" target="_blank" rel="noopener">Restricted</a></td>
 <td>Reads mail, drafts and labels; Google refuses any change</td>
 </tr>
 </tbody>
@@ -1732,8 +1745,8 @@ the pod as environment variables.</p>
 <li><strong>Network:</strong> inbound https from browsers, Claude.ai and nexos.ai (so internet-reachable).
   Outbound to <code>gmail.googleapis.com</code> (or <code>gmailmcp.googleapis.com</code>), <code>oauth2.googleapis.com</code>,
   <code>accounts.google.com</code>, <code>www.googleapis.com</code> and Redis. Upstream calls time out after 60 s.</li>
-<li><strong>TLS:</strong> terminate in front of the guard. <code>MCP_GUARD_BASE_URL</code> must be https; Google refuses
-  non-https redirect URIs except localhost.</li>
+<li><strong>TLS:</strong> terminate in front of the guard. <code>MCP_GUARD_BASE_URL</code> must be https; Google <a href="https://developers.google.com/identity/protocols/oauth2/web-server#uri-validation" target="_blank" rel="noopener">refuses
+  non-https redirect URIs except localhost</a>.</li>
 <li><strong>Logs:</strong> one JSON audit line per tool call on stdout (<a href="#configuration--audit-log">format</a>),
   plus warnings for refused people, refused tokens and changed pinned tools. Alert on
   <code>"decision": "deny"</code> with <code>"outcome": "refused"</code> (an agent trying to write) and on pin drift.</li>
@@ -1748,26 +1761,26 @@ can the gateway pass the MCP OAuth flow through to the guard unchanged, or is th
 directly with its own URL? It is built for direct exposure today.</p>
 <h2 id="deploy--4-connecting-clients">4. Connecting clients</h2>
 <p>The guard serves MCP over Streamable HTTP at <code>https://&lt;guard&gt;/mcp</code> with standard MCP OAuth
-(client metadata documents, CIMD, as Claude uses, or dynamic client registration). <strong>Only
+(<a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/client-registration#client-id-metadata-documents" target="_blank" rel="noopener">client metadata documents, CIMD</a>, as Claude uses, or <a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/client-registration#dynamic-client-registration" target="_blank" rel="noopener">dynamic client registration</a>). <strong>Only
 callbacks in <code>MCP_GUARD_CLIENT_REDIRECT_URIS</code> are accepted</strong> (Claude only by default), so another
 app can't collect people's Gmail access.</p>
 <h3 id="deploy--claude-code">Claude Code</h3>
 <p><code>claude mcp add --transport http gmail https://&lt;guard&gt;/mcp</code>, then sign in when asked (or from
-<code>/mcp</code>). Its <code>http://localhost:&lt;port&gt;/callback</code> is allowed by default. To roll it out to everyone,
+<code>/mcp</code>; <a href="https://code.claude.com/docs/en/mcp#authenticate-with-remote-mcp-servers" target="_blank" rel="noopener">Claude Code docs</a>). Its <a href="https://claude.com/docs/connectors/building/authentication#callback-urls" target="_blank" rel="noopener"><code>http://localhost:&lt;port&gt;/callback</code></a> is allowed by default. To roll it out to everyone,
 use managed settings (<a href="#rb-claude-code-managed-settings">runbook</a>).</p>
 <h3 id="deploy--claudeai-and-claude-desktop">Claude.ai and Claude Desktop</h3>
 <ol>
-<li>Add a custom connector with URL <code>https://&lt;guard&gt;/mcp</code> and, under OAuth client, choose <strong>Use
-   Claude's published identity</strong>.</li>
+<li>Add a custom connector with URL <code>https://&lt;guard&gt;/mcp</code> and, under OAuth client, choose <a href="https://claude.com/docs/connectors/custom/add-unlisted#choose-authentication-settings" target="_blank" rel="noopener"><strong>Use
+   Claude's published identity</strong></a>.</li>
 <li>Connect and sign in with Google.</li>
-<li>Organisation Owners can add it once for everyone, set its tools to Always allow (all are
+<li>Organisation Owners can add it once for everyone, set its tools to <a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9fa8289074" target="_blank" rel="noopener">Always allow</a> (all are
    reads), and block the built-in Gmail connector (<a href="#rb-claude-org">runbook</a>).</li>
 </ol>
-<p>Claude.ai calls the guard from Anthropic's range <code>160.79.104.0/21</code> and gives its sign-in
-endpoints 10 seconds to answer. Browsers must also reach <code>/authorize</code>, the Google callback and
+<p>Claude.ai calls the guard from <a href="https://platform.claude.com/docs/en/api/ip-addresses#:~:text=Outbound%20IP%20addresses" target="_blank" rel="noopener">Anthropic's outbound ranges <code>160.79.104.0/21</code> and <code>153.61.208.0/20</code></a> and gives its sign-in
+endpoints <a href="https://claude.com/docs/connectors/building/authentication#endpoint-latency" target="_blank" rel="noopener">10 seconds</a> to answer. Browsers must also reach <code>/authorize</code>, the Google callback and
 <code>/keys</code>, so don't limit the guard to Anthropic's and nexos's addresses.</p>
 <h3 id="deploy--nexosai">nexos.ai</h3>
-<p>nexos takes a per-person API key, so set <code>MCP_GUARD_PERSONAL_KEYS=true</code>. Each person makes a key
+<p>nexos takes a <a href="https://docs.nexos.ai/workspace/integrations/custom-mcp#add-the-custom-mcp-to-nexos.ai" target="_blank" rel="noopener">per-person API key</a>, so set <code>MCP_GUARD_PERSONAL_KEYS=true</code>. Each person makes a key
 at <code>https://&lt;guard&gt;/keys</code> and pastes it into nexos (<a href="#nexos-setup">docs/nexos-setup.md</a>).</p>
 <h3 id="deploy--other-mcp-clients">Other MCP clients</h3>
 <p>Add the client's callback to <code>MCP_GUARD_CLIENT_REDIRECT_URIS</code>; until then <code>/register</code> refuses it
@@ -1810,32 +1823,37 @@ curl https://&lt;guard&gt;/.well-known/oauth-protected-resource/mcp   # scopes: 
   and an agent that can also write or fetch elsewhere can be steered into copying mail out. Keep
   agents with Gmail away from tools that send data out, or require approval for those.</li>
 <li><strong>Google keeps at most 100 refresh tokens per person per OAuth client</strong>, silently dropping the
-  oldest. Each sign-in and personal key uses one, so very frequent sign-ins can break an old one.</li>
+  oldest (<a href="https://developers.google.com/identity/protocols/oauth2#expiration" target="_blank" rel="noopener">OAuth 2.0</a>). Each sign-in and personal key uses one, so very frequent sign-ins can break an old one.</li>
 <li><strong>Personal keys are bearer credentials</strong> to a whole mailbox for 180 days, stored by nexos. Revoke
   a key when someone leaves nexos. Suspending the person in Workspace also stops it.</li>
 <li><strong>Google's tokeninfo endpoint</strong>, where the guard checks tokens (cached up to a minute), "may be
-  throttled" (<a href="https://developers.google.com/identity/openid-connect/openid-connect" target="_blank" rel="noopener">OpenID Connect</a>).
+  throttled" (<a href="https://developers.google.com/identity/openid-connect/openid-connect#validatinganidtoken" target="_blank" rel="noopener">OpenID Connect</a>).
   At large scale or if throttling shows in the logs, verify tokens another way.</li>
 <li><strong>One domain.</strong> <code>MCP_GUARD_ALLOWED_DOMAIN</code> takes one Workspace domain, compared with the
-  account's <code>hd</code>. In a multi-domain Workspace, check what <code>hd</code> a secondary-domain account gets.</li>
-<li><strong>Claude connector settings are fixed once added.</strong> Changing the OAuth client choice means
-  re-adding it, and everyone connects again.</li>
+  account's <a href="https://developers.google.com/identity/openid-connect/openid-connect#an-id-tokens-payload" target="_blank" rel="noopener"><code>hd</code></a>. In a multi-domain Workspace, check what <code>hd</code> a secondary-domain account gets.</li>
+<li><strong>A Claude connector's sign-in settings are fixed once added</strong> (its name and URL can still be
+  edited). Changing the OAuth client choice means re-adding it, and everyone connects again (<a href="https://claude.com/docs/connectors/custom/add-unlisted#edit-or-remove-a-connector" target="_blank" rel="noopener">Claude docs</a>).</li>
 </ul></div></details><details class="runbook" id="nexos-setup"><summary>Adding the guard to nexos.ai<span class="tag">runbook</span></summary><div class="doc-body"><p class="src-note" style="color:var(--muted);font-size:.85rem;margin:4px 0 0">Source: <code>docs/nexos-setup.md</code></p>
 <p>nexos.ai can only turn whole integrations on or off, not single tools. So read-only Gmail in nexos
 means: built-in Gmail <strong>off</strong>, and the guard added as a <strong>custom MCP</strong>, with each user's own
 personal key. Background: <a href="#findings">findings.md</a>.</p>
+<p><strong>Why personal keys:</strong> nexos's custom MCP authenticates each user with their own API key ("Each
+user will be able to provide their own API key individually once the server is connected",
+<a href="https://docs.nexos.ai/workspace/integrations/custom-mcp#add-the-custom-mcp-to-nexos.ai" target="_blank" rel="noopener">nexos docs</a>); it documents no OAuth
+sign-in. A personal key is that API key: the guard issues it to one person, and it reads only that
+person's mailbox. Not yet tried against real nexos (see <a href="#nexos-setup--not-verified-yet">Not verified yet</a>).</p>
 <p><strong>Before you start:</strong> the guard is deployed with <code>MCP_GUARD_PERSONAL_KEYS=true</code> at
 <code>https://gmail-guard.example.com</code>, and <code>https://gmail-guard.example.com/keys/callback</code> is in the
 Google OAuth client's redirect URIs (<a href="#deploy">DEPLOY.md</a>). The same deployment keeps serving
 Claude.</p>
 <h2 id="nexos-setup--organization-setup-nexos-owner">Organization setup [nexos Owner]</h2>
 <ol>
-<li><strong>Turn off built-in Gmail:</strong> Settings &gt; Organization &gt; Integrations (or Management &gt; Apps) &gt;
-   Gmail &gt; <strong>Inactive</strong>. Its tools and scopes are undocumented.</li>
+<li><strong>Turn off built-in Gmail:</strong> <a href="https://docs.nexos.ai/workspace/integrations#activate-or-deactivate-an-integration" target="_blank" rel="noopener">Settings &gt; Organization &gt; Integrations</a> (or Management &gt; Apps) &gt;
+   Gmail &gt; <strong>Inactive</strong>. Its tools and scopes are <a href="https://docs.nexos.ai/workspace/integrations/gmail" target="_blank" rel="noopener">undocumented</a>.</li>
 <li><strong>Block nexos's Gmail app at Google [GWA]:</strong> a Workspace admin sets it to <strong>Blocked</strong> (or
    Specific Google data) under Accessed apps, so nobody gets write access through it
    (<a href="#rb-google-workspace-admin">google-workspace-admin.md</a>).</li>
-<li><strong>Add the custom MCP:</strong> Management &gt; Apps &gt; <strong>Add custom MCP</strong>:
+<li><strong>Add the custom MCP:</strong> <a href="https://docs.nexos.ai/workspace/integrations/custom-mcp#add-the-custom-mcp-to-nexos.ai" target="_blank" rel="noopener">Management &gt; Apps &gt; <strong>Add custom MCP</strong></a>:
    - Server name: <code>Gmail (read-only)</code>
    - Server URL: <code>https://gmail-guard.example.com/mcp</code>
    - Authentication: API key, provided by each user individually
@@ -1845,10 +1863,10 @@ Claude.</p>
    who haven't added theirs; if it does, every member would read your mailbox. Use a key from a
    throwaway account in the domain, revoke it afterwards, and confirm that members without a key
    get no access.</li>
-<li>Optional: ask nexos for its egress IPs and limit who can reach the guard (keep your users and
+<li>Optional: <a href="https://docs.nexos.ai/workspace/integrations/custom-mcp#use-the-custom-mcp" target="_blank" rel="noopener">ask nexos for its egress IPs</a> and limit who can reach the guard (keep your users and
    Claude.ai, if used).</li>
 </ol>
-<p>A custom MCP is organization-wide: every team and member can use it once enabled. Each member
+<p>A custom MCP is <a href="https://docs.nexos.ai/workspace/integrations/custom-mcp#faq" target="_blank" rel="noopener">organization-wide</a>: every team and member can use it once enabled. Each member
 still needs their own key, and a key reads only its owner's mailbox.</p>
 <h2 id="nexos-setup--per-user-setup-each-user">Per-user setup [each user]</h2>
 <ol>
@@ -1856,7 +1874,7 @@ still needs their own key, and a key reads only its owner's mailbox.</p>
    accounts in your Workspace domain work, and Google asks only for read access to Gmail.</li>
 <li>Copy the key. It starts with <code>mcpg_</code>, is shown once, and is valid for 180 days.</li>
 <li>In nexos, open the "Gmail (read-only)" app and paste the key as your API key.</li>
-<li>Turn it on in a chat (Tools panel) or an agent (Agent Settings &gt; Integrations).</li>
+<li>Turn it on in a chat (Tools panel) or an agent (Agent Settings &gt; Integrations) (<a href="https://docs.nexos.ai/workspace/integrations#where-you-can-use-integrations" target="_blank" rel="noopener">nexos docs</a>).</li>
 </ol>
 <p>One key per person: making a new key replaces the old one, which is also the fix for a lost key.
 We don't know which header nexos sends the key in, so the guard accepts both
@@ -1864,7 +1882,7 @@ We don't know which header nexos sends the key in, so the guard accepts both
 <h2 id="nexos-setup--what-users-get">What users get</h2>
 <p>Six read-only tools: <code>search_threads</code>, <code>get_thread</code>, <code>get_message</code>, <code>list_labels</code>, <code>list_drafts</code>
 and <code>get_draft</code>. Nothing can send, draft, label, archive or delete, and the Google token behind
-them can't either.</p>
+them can't either. Attachments show up by name, type and size only; their contents can't be read.</p>
 <h2 id="nexos-setup--revoking-access">Revoking access</h2>
 <ul>
 <li><strong>One key:</strong> the user chooses <strong>Sign in and revoke my key</strong> on the keys page. The key fails with
@@ -1875,17 +1893,17 @@ them can't either.</p>
 </ul>
 <h2 id="nexos-setup--what-nexos-cant-do">What nexos can't do</h2>
 <ul>
-<li><strong>No per-tool or per-team control.</strong> Integrations are Active or Inactive for the whole
-  organization; Team Owners don't manage apps.</li>
+<li><strong>No per-tool or per-team control.</strong> Integrations are <a href="https://docs.nexos.ai/workspace/integrations#activate-or-deactivate-an-integration" target="_blank" rel="noopener">Active or Inactive</a> for the whole
+  organization; Team Owners <a href="https://docs.nexos.ai/workspace/settings/organization/roles-and-permissions#team-owner" target="_blank" rel="noopener">don't manage apps</a>.</li>
 <li><strong>Approvals (HITL) are advisory.</strong> An agent pauses before actions that change something, but any
-  user can pick "Always approve", and read-only actions run without asking. nexos doesn't document
+  user can pick <a href="https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals#what-you-can-do" target="_blank" rel="noopener">"Always approve"</a>, and <a href="https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals#what-users-need-to-know" target="_blank" rel="noopener">read-only actions run without asking</a>. nexos doesn't document
   how it tells read from write. The guard's tools carry <code>readOnlyHint: true</code>, so they should count
   as read-only. Don't rely on HITL as the read-only control.</li>
 <li><strong>No OAuth for custom MCP</strong> is documented, hence personal keys.</li>
-<li><strong>Claude Code through the nexos gateway</strong> (<code>ANTHROPIC_BASE_URL=https://api.nexos.ai</code>) gets no
-  claude.ai connectors or server-managed settings; only MDM or file-deployed managed settings
+<li><strong>Claude Code through the <a href="https://docs.nexos.ai/gateway-api/integrations/claude-code#id-2.-connect-claude-code-to-nexos.ai" target="_blank" rel="noopener">nexos gateway</a></strong> (<code>ANTHROPIC_BASE_URL=https://api.nexos.ai</code>) gets no
+  <a href="https://code.claude.com/docs/en/mcp#use-mcp-servers-from-claude-ai" target="_blank" rel="noopener">claude.ai connectors</a> or <a href="https://code.claude.com/docs/en/server-managed-settings#platform-availability" target="_blank" rel="noopener">server-managed settings</a>; only MDM or file-deployed managed settings
   govern it (<a href="#rb-claude-code-managed-settings">claude-code-managed-settings.md</a>).</li>
-<li><strong>Payhawk</strong> doesn't allow sign-in from nexos today (<a href="#rb-payhawk">payhawk.md</a>).</li>
+<li><strong>Payhawk</strong> <a href="https://payhawk.com/help/connecting-payhawk-mcp#supported-ai-assistants" target="_blank" rel="noopener">doesn't allow sign-in from nexos</a> today (<a href="#rb-payhawk">payhawk.md</a>).</li>
 </ul>
 <p>Worth asking nexos: OAuth for custom MCP (no keys needed then), its egress IPs, and whether any
 control depends on the plan.</p>
@@ -1946,14 +1964,15 @@ control depends on the plan.</p>
 </tr>
 </tbody>
 </table></div>
-<p>Layer 1 is the real guarantee: Google rejects any write made with the token. The sign-in asks for
+<p>Layer 1 is the real guarantee: <a href="https://developers.google.com/workspace/gmail/api/auth/scopes#restricted-scopes" target="_blank" rel="noopener">Google rejects any write</a> made with the token. The sign-in asks for
 exactly <code>openid</code>, <code>userinfo.email</code> and <code>gmail.readonly</code>, and Google's tokeninfo confirms each token
 was issued to the guard's OAuth client with those scopes and no more. A token pasted in <code>--dev</code> is
 refused the same way but not revoked, since it's the person's own.</p>
 <h2 id="security-model--who-gets-in">Who gets in</h2>
 <ul>
-<li><strong>Only company Workspace accounts.</strong> The Internal consent screen blocks others at Google, and the
-  guard requires a verified email in the allowed domain with a matching Workspace domain (<code>hd</code>).
+<li><strong>Only company Workspace accounts.</strong> The <a href="https://support.google.com/cloud/answer/15549945#user-type-internal" target="_blank" rel="noopener">Internal consent screen</a> blocks others at Google, and the
+  guard requires a verified email in the allowed domain with a matching Workspace domain
+  (<a href="https://developers.google.com/identity/openid-connect/openid-connect#an-id-tokens-payload" target="_blank" rel="noopener"><code>hd</code></a>).
   Without <code>hd</code>, a personal Google account made for <code>pat@example.com</code> would get in, and the
   company can't suspend or offboard it.</li>
 <li><strong>Only Claude signs in with OAuth.</strong> Clients may register only the callbacks in
@@ -1984,7 +2003,7 @@ refused the same way but not revoked, since it's the person's own.</p>
 <td>Optional <a href="#configuration--pins">pins</a>; a changed tool is dropped and its new hash logged</td>
 </tr>
 <tr>
-<td>Lying <code>readOnlyHint</code> annotations</td>
+<td><a href="https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool" target="_blank" rel="noopener">Lying <code>readOnlyHint</code> annotations</a></td>
 <td>Only the allowlist decides, so a lying annotation can't add a tool</td>
 </tr>
 <tr>
@@ -2013,7 +2032,7 @@ refused the same way but not revoked, since it's the person's own.</p>
 </tr>
 <tr>
 <td>Oversized responses</td>
-<td>Results cut at 1 MB, bodies at 20,000 characters</td>
+<td>Results cut at 1 MB; bodies returned 20,000 characters at a time; attachment contents never read</td>
 </tr>
 <tr>
 <td>Mail leaking into logs</td>
@@ -2024,8 +2043,8 @@ refused the same way but not revoked, since it's the person's own.</p>
 <h2 id="security-model--not-covered">Not covered</h2>
 <ul>
 <li><strong>Prompt injection in mail.</strong> Mail is untrusted input. It can't make the guard send anything, but
-  it can steer the model's other tools in the same chat. Screening responses (like Google's Model
-  Armor) is a possible follow-up.</li>
+  it can steer the model's other tools in the same chat. Screening responses (like Google's <a href="https://developers.google.com/workspace/guides/configure-mcp-security#model-armor" target="_blank" rel="noopener">Model
+  Armor</a>) is a possible follow-up.</li>
 <li><strong>Argument checks.</strong> The allowlist is by name only; enough while every allowed tool is read-only.</li>
 <li><strong>Payhawk.</strong> Not wired; it needs its own per-person sign-in (<a href="#rb-payhawk">payhawk.md</a>).</li>
 <li><strong>Revoking a key doesn't revoke at Google.</strong> It deletes the stored Google token; revoking the grant
@@ -2066,23 +2085,23 @@ below is about policy, ownership and the real environment. Background:
 <p><strong>D1. Is Anthropic's tool blocking enough for Gmail, or must the Google permission itself be
 read-only?</strong></p>
 <ul>
-<li>(a) Claude's built-in Gmail connector with write tools Blocked: no code, but the Google grant
-  behind it can still send.</li>
+<li>(a) Claude's built-in Gmail connector with write tools <a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9fa8289074" target="_blank" rel="noopener">Blocked</a>: no code, but the Google grant
+  behind it <a href="https://support.claude.com/en/articles/10166901-use-google-workspace-connectors#h_60ffa285c8" target="_blank" rel="noopener">can still send</a>.</li>
 <li>(b) The guard: the Google token is <code>gmail.readonly</code>, so Google refuses any change.</li>
-<li><strong>Recommended: (b).</strong> It is also the only option that covers nexos.ai, which can't limit tools.</li>
+<li><strong>Recommended: (b).</strong> It is also the only option that covers nexos.ai, which <a href="https://docs.nexos.ai/workspace/integrations#activate-or-deactivate-an-integration" target="_blank" rel="noopener">can't limit tools</a>.</li>
 </ul>
 <p><strong>D2. How does the guard reach Gmail?</strong></p>
 <ul>
 <li>(a) Gmail API (generally available).</li>
-<li>(b) Google's Gmail MCP server (Developer Preview: enrolment, preview terms, an AI-agent OAuth
+<li>(b) Google's Gmail MCP server (<a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#prerequisites" target="_blank" rel="noopener">Developer Preview</a>: enrolment, preview terms, an AI-agent OAuth
   client, prompt screening).</li>
-<li>(c) Buy: a Cloudflare MCP portal in front of Gmail MCP.</li>
+<li>(c) Buy: a <a href="https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/" target="_blank" rel="noopener">Cloudflare MCP portal</a> in front of Gmail MCP.</li>
 <li><strong>Recommended: (a)</strong>, the default. Switching to (b) later is a config change plus Google-side
   setup.</li>
 </ul>
 <p><strong>D3. Payhawk</strong></p>
 <ul>
-<li>(a) Ask Payhawk to allow our proxy's sign-in address (keeps per-person permissions).</li>
+<li>(a) Ask Payhawk to <a href="https://payhawk.com/help/connecting-payhawk-mcp#supported-ai-assistants" target="_blank" rel="noopener">allow our proxy's sign-in address</a> (keeps per-person permissions).</li>
 <li>(b) A shared read-only Payhawk API key.</li>
 <li>(c) No proxy: Payhawk in Claude only, write tools Blocked.</li>
 <li><strong>Recommended: (c)</strong> if only Claude needs Payhawk; <strong>(a)</strong> if nexos does.</li>
@@ -2100,7 +2119,7 @@ read-only?</strong></p>
 <li><strong>Recommended:</strong> keep 180 days for the pilot; revisit after.</li>
 </ul>
 <h2 id="questions--questions-by-who-can-answer">Questions, by who can answer</h2>
-<p>The four that change the plan most: <strong>1</strong>, <strong>6</strong>, <strong>10</strong> and <strong>16</strong>.</p>
+<p>The four that change the plan most: <strong>1</strong>, <strong>6</strong>, <strong>10</strong> and <strong>17</strong>.</p>
 <h3 id="questions--leadership--security">Leadership / security</h3>
 <ol>
 <li>Which of D1-D5 above do you agree with? Who signs off?</li>
@@ -2110,10 +2129,10 @@ read-only?</strong></p>
 </ol>
 <h3 id="questions--claude-admins-owners">Claude admins (Owners)</h3>
 <ol start="5">
-<li><strong>Team or Enterprise</strong>, and how many seats? (The onboarding email says Team; Enterprise adds custom roles and the verified-domain restriction.)</li>
+<li><strong>Team or Enterprise</strong>, and how many seats? (The onboarding email says Team; Enterprise adds <a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans" target="_blank" rel="noopener">custom roles</a> and the <a href="https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise" target="_blank" rel="noopener">verified-domain restriction</a>.)</li>
 <li>Will you add the guard as an org <strong>custom connector</strong> and <strong>block the built-in Gmail connector</strong>?</li>
-<li>Are member connector requests on, and can they be declined by default?</li>
-<li>Do people use Claude Code with the company Claude account or with API keys? (API-key sessions skip the org's connector controls.)</li>
+<li>Are member <a href="https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities#h_9213598058" target="_blank" rel="noopener">connector requests</a> on, and can they be declined by default?</li>
+<li>Do people use Claude Code with the company Claude account or with API keys? (API-key sessions <a href="https://code.claude.com/docs/en/mcp#use-mcp-servers-from-claude-ai" target="_blank" rel="noopener">skip the org's connector controls</a>.)</li>
 </ol>
 <h3 id="questions--it--device-management">IT / device management</h3>
 <ol start="9">
@@ -2124,15 +2143,21 @@ read-only?</strong></p>
 <li>Will you <strong>block "Claude for Gmail"</strong> and nexos.ai's Gmail app at Google, and allow the guard's OAuth client for read-only Gmail ("Specific Google data")? Can we pilot with one group first?</li>
 <li>Who creates and owns the <strong>Google Cloud project and Internal OAuth client</strong> for the guard?</li>
 <li>Do we have more than one Workspace domain? The guard accepts one, matched against the account's Workspace domain (<code>hd</code>).</li>
+<li>Should the guard's OAuth client be created with <strong>Use this client for an AI-powered agent</strong>
+    ticked? The default Gmail API mode doesn't need it, but <a href="https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server#configure-mcp-client" target="_blank" rel="noopener">Google's Gmail MCP does</a>, and it
+    <a href="https://support.google.com/cloud/answer/15549257#agentic-client" target="_blank" rel="noopener">labels agent traffic for admin controls</a>. A
+    <a href="https://github.com/taylorwilsdon/google_workspace_mcp#:~:text=it%20can%27t%20be%20changed%20on%20an%20existing%20client%20after%20November%2012%2C%202026" target="_blank" rel="noopener">third-party project</a>
+    says the setting can't be changed on an existing client after <strong>November 12, 2026</strong> (Google's docs give no date); if so, switching to
+    Gmail MCP later means a new client.</li>
 </ol>
 <h3 id="questions--nexosai-admins">nexos.ai admins</h3>
-<ol start="13">
+<ol start="14">
 <li>Which nexos plan, and who is the nexos Owner?</li>
 <li>Can the built-in Gmail integration be switched off once the guard is live?</li>
 <li>Ask nexos: does custom MCP support <strong>OAuth</strong> (then personal keys could go), which <strong>header</strong> carries the API key, what are their <strong>egress IPs</strong>, and does a key entered when adding the server become a <strong>default for members</strong> who haven't added their own?</li>
 </ol>
 <h3 id="questions--payhawk-owners--finance">Payhawk owners / finance</h3>
-<ol start="16">
+<ol start="17">
 <li>Is Payhawk needed in <strong>nexos</strong>, or only in <strong>Claude</strong>? (Only Claude: no proxy needed.)</li>
 <li>If nexos needs it: will someone ask Payhawk Support to allow our proxy's sign-in address, or is a shared read-only API key acceptable?</li>
 </ol></section>

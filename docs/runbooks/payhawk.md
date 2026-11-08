@@ -1,17 +1,17 @@
 # Runbook: Payhawk MCP
 
-For Claude Owners and Payhawk admins: give AI assistants read-only Payhawk access. Background: [findings.md](../findings.md#65-payhawk-mcp). Checked on 2026-11-08 against Payhawk's [About](https://payhawk.com/help/payhawk-mcp-overview.md), [Connecting](https://payhawk.com/help/connecting-payhawk-mcp.md), [Tool reference](https://payhawk.com/help/payhawk-mcp-tool-reference.md), [FAQ](https://payhawk.com/help/faq-on-the-payhawk-mcp.md), [Troubleshooting](https://payhawk.com/help/troubleshooting-the-payhawk-mcp.md), [Developer API](https://payhawk.com/help/overview-of-the-payhawk-developer-api.md).
+For Claude Owners and Payhawk admins: give AI assistants read-only Payhawk access. Background: [findings.md](../findings.md#65-payhawk-mcp). Checked on 2026-11-08 against Payhawk's [About](https://payhawk.com/help/payhawk-mcp-overview), [Connecting](https://payhawk.com/help/connecting-payhawk-mcp), [Tool reference](https://payhawk.com/help/payhawk-mcp-tool-reference), [FAQ](https://payhawk.com/help/faq-on-the-payhawk-mcp), [Troubleshooting](https://payhawk.com/help/troubleshooting-the-payhawk-mcp), [Developer API](https://payhawk.com/help/overview-of-the-payhawk-developer-api).
 
 ## Key facts
 
-- **Server:** `https://mcp.payhawk.com/mcp`. Each user signs in with their own Payhawk login, so Payhawk roles apply. Sessions last 7 days unused, 30 at most.
-- **Only listed apps can sign in** (Claude, Claude Code, ChatGPT, Cursor and others); others fail with `host-not-allowed`. **nexos.ai is not listed.**
-- **Write tools** need user confirmation (a prompt, not a read-only mode). The MCP "never starts a payment or a transfer".
-- **API keys** are Full access or Read-only, account-wide, 15 requests/s.
+- **Server:** `https://mcp.payhawk.com/mcp`. Each user signs in with their own Payhawk login, so Payhawk roles apply. Sessions last 7 days unused, 30 at most ([Connecting](https://payhawk.com/help/connecting-payhawk-mcp#before-you-start)).
+- [**Only listed apps can sign in**](https://payhawk.com/help/connecting-payhawk-mcp#supported-ai-assistants) (Claude, Claude Code, ChatGPT, Cursor and others); others [fail with `host-not-allowed`](https://payhawk.com/help/troubleshooting-the-payhawk-mcp#sign-in-fails-host-not-allowed). **nexos.ai is not listed.**
+- **Write tools** need [user confirmation](https://payhawk.com/help/payhawk-mcp-tool-reference#:~:text=They%20always%20show%20a%20preview%20and%20need%20your%20confirmation) (a prompt, not a read-only mode). The MCP ["never starts a payment or a transfer"](https://payhawk.com/help/payhawk-mcp-overview#keeping-your-data-safe).
+- **API keys** are [Full access or Read-only, account-wide](https://payhawk.com/help/overview-of-the-payhawk-developer-api#h_8996f3095d), [15 requests/s](https://payhawk.com/help/overview-of-the-payhawk-developer-api#h_8ef888c8ee).
 
 ![Payhawk accepts sign-ins only from the listed AI apps; nexos.ai is not listed](../images/payhawk-supported-clients.png)
 
-*Source: [Payhawk Help Center, Connecting Payhawk to your AI Assistant](https://payhawk.com/help/connecting-payhawk-mcp.md), captured 2026-11-08.*
+*Source: [Payhawk Help Center, Connecting Payhawk to your AI Assistant](https://payhawk.com/help/connecting-payhawk-mcp#supported-ai-assistants), captured 2026-11-08.*
 
 ## Options
 
@@ -25,14 +25,14 @@ For Claude Owners and Payhawk admins: give AI assistants read-only Payhawk acces
 
 ## Option A steps (Claude only)
 
-1. Organization settings > Connectors > Add custom connector: URL `https://mcp.payhawk.com/mcp`, OAuth client "Register automatically".
+1. Organization settings > Connectors > Add custom connector: URL `https://mcp.payhawk.com/mcp`, OAuth client "Register automatically" ([Connecting to Claude](https://payhawk.com/help/connecting-payhawk-mcp#connecting-to-claude)).
 2. In its tool permissions, set every **Write** and **Ambiguous** tool (table below) to **Blocked**. Read tools: Always allow or Needs approval.
 3. Members connect with their own Payhawk login.
 4. For Claude Code sessions not logged in to claude.ai, see [claude-code-managed-settings.md](claude-code-managed-settings.md).
 
 ## Option B steps (proxy)
 
-1. **Start early:** email support@payhawk.com asking them to allow the proxy's redirect URI (e.g. `https://payhawk-ro.example.com/auth/callback`).
+1. **Start early:** [email support@payhawk.com](https://payhawk.com/help/troubleshooting-the-payhawk-mcp#sign-in-fails-host-not-allowed) asking them to allow the proxy's redirect URI (e.g. `https://payhawk-ro.example.com/auth/callback`).
 2. Once allowed, deploy the proxy in front of `https://mcp.payhawk.com/mcp` ([proxy-design.md](../proxy-design.md#payhawk)).
 3. Call `tools/list` once and record each tool's `annotations` and input schema.
 4. Allowlist only the Read tools below; everything else is denied.
@@ -40,7 +40,7 @@ For Claude Owners and Payhawk admins: give AI assistants read-only Payhawk acces
 
 ## Tool classification (82 tools)
 
-**Inferred from the names** plus Payhawk's rule that read tools "never change anything". **Deny anything unclear.**
+**Inferred from the [names](https://payhawk.com/help/payhawk-mcp-tool-reference#full-list-of-supported-payhawk-mcp-tools)** plus Payhawk's rule that read tools ["never change anything"](https://payhawk.com/help/payhawk-mcp-tool-reference#:~:text=They%20never%20change%20anything). **Deny anything unclear.**
 
 | Class | Tools |
 |---|---|

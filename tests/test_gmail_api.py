@@ -66,7 +66,77 @@ async def test_get_thread_and_message_bodies(client: Client[Any]) -> None:
 
     message = await call(client, "get_message", {"message_id": "m3", "max_body_chars": 7})
     assert message["subject"] == "Team offsite"
-    assert message["body"] == {"text": "Offsite", "source": "text/plain", "truncated": True}
+    assert message["body"] == {
+        "text": "Offsite",
+        "source": "text/plain",
+        "truncated": True,
+        "next_body_offset": 7,
+        "total_chars": 21,
+    }
+
+
+async def test_long_body_is_read_in_parts(client: Client[Any]) -> None:
+    parts: list[str] = []
+    offset = 0
+    while True:
+        message = await call(
+            client, "get_message", {"message_id": "m3", "max_body_chars": 8, "body_offset": offset}
+        )
+        parts.append(message["body"]["text"])
+        if not message["body"]["truncated"]:
+            break
+        offset = message["body"]["next_body_offset"]
+    assert parts == ["Offsite ", "is on Fr", "iday."]
+    assert message["body"]["offset"] == 16
+    assert "next_body_offset" not in message["body"]
+    draft = await call(client, "get_draft", {"draft_id": "d1", "body_offset": 6})
+    assert draft["message"]["body"]["text"] == "body"
+
+
+@pytest.fixture
+def no_retry_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("mcp_guard.gmail_api.RETRY_BASE_S", 0)
+
+
+@pytest.mark.usefixtures("no_retry_wait")
+@pytest.mark.parametrize(
+    "failures",
+    [
+        [(429, None, None), (503, None, None)],
+        [(403, None, "userRateLimitExceeded")],
+        [(429, "1", "rateLimitExceeded")],
+    ],
+)
+async def test_rate_limits_and_hiccups_are_retried(
+    client: Client[Any], google: Google, failures: list[tuple[int, str | None, str | None]]
+) -> None:
+    google.fake.gmail_failures = list(failures)
+    labels = await call(client, "list_labels")
+    assert labels["labels"]
+    assert len(google.fake.gmail_requests) == len(failures) + 1
+
+
+@pytest.mark.usefixtures("no_retry_wait")
+@pytest.mark.parametrize(
+    ("failures", "requests", "error"),
+    [
+        ([(429, None, None)] * 3, 3, "rate limit"),  # gives up after three tries
+        ([(429, "60", None)], 1, "rate limit"),  # a long Retry-After isn't waited out
+        # A quota for the day won't clear by retrying.
+        ([(403, None, "dailyLimitExceeded")], 1, "refused the request"),
+    ],
+)
+async def test_retries_are_bounded(
+    client: Client[Any],
+    google: Google,
+    failures: list[tuple[int, str | None, str | None]],
+    requests: int,
+    error: str,
+) -> None:
+    google.fake.gmail_failures = list(failures)
+    with pytest.raises(ToolError, match=error):
+        await client.call_tool("list_labels", {})
+    assert len(google.fake.gmail_requests) == requests
 
 
 async def test_labels_and_drafts(client: Client[Any]) -> None:
