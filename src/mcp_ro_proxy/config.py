@@ -114,25 +114,13 @@ class NoUpstreamAuth(_Model):
     type: Literal["none"]
 
 
-class StaticBearerUpstreamAuth(_Model):
-    """A fixed service credential for the upstream (never the MCP client's token)."""
-
-    type: Literal["static_bearer"]
-    token: SecretStr
-
-
-UpstreamAuthConfig = Annotated[
-    NoUpstreamAuth | StaticBearerUpstreamAuth, Field(discriminator="type")
-]
-
-
 class McpUpstreamConfig(_Model):
     """An upstream MCP server that is proxied with filtering and pinning."""
 
     kind: Literal["mcp"]
     name: str
     url: str
-    auth: UpstreamAuthConfig = NoUpstreamAuth(type="none")
+    auth: NoUpstreamAuth = NoUpstreamAuth(type="none")
     timeout_seconds: float = Field(default=60.0, gt=0)
     definition_cache_seconds: float = Field(default=30.0, ge=0)
 

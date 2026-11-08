@@ -2,7 +2,9 @@
 #
 # Payhawk's MCP (https://mcp.payhawk.com/mcp) accepts OAuth sign-ins only from allowlisted
 # apps, so a proxy cannot sign users in until Payhawk Support allowlists its redirect URI.
-# Per-user upstream OAuth is not implemented yet (see docs/configuration.md, "mcp upstream").
+# Per-user upstream OAuth for `mcp` upstreams is not built yet (see docs/configuration.md,
+# "mcp upstream"), and a shared upstream credential is an open stakeholder decision
+# (docs/open-questions.md, "Payhawk").
 # Until then, Claude can use Payhawk directly with its write tools Blocked in the org policy.
 #
 # Workflow once upstream auth is available:
@@ -16,7 +18,7 @@ upstream:
   name: payhawk
   url: https://mcp.payhawk.com/mcp
   auth:
-    type: none            # placeholder: Payhawk needs per-user OAuth (follow-up)
+    type: none            # the only mode; Payhawk needs per-user OAuth (not built yet)
   timeout_seconds: 60
   definition_cache_seconds: 30
 

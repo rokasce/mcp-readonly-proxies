@@ -65,17 +65,20 @@ upstream:
   kind: mcp
   name: payhawk
   url: https://mcp.payhawk.com/mcp      # https required (http only for localhost)
-  auth: {type: none}                    # or {type: static_bearer, token: ${UPSTREAM_TOKEN}}
+  auth: {type: none}                    # the only mode: no upstream credential
   timeout_seconds: 60
   definition_cache_seconds: 30          # how long call-time pin checks reuse a listing
 ```
 
 The proxy is an ordinary MCP client of the upstream. It never forwards the MCP client's
 credentials or other request headers, and it never relays resources, prompts, sampling,
-elicitation or roots. `static_bearer` is a service credential the proxy itself holds.
-**Per-user upstream OAuth (what Payhawk needs) is not implemented yet**: Payhawk accepts
-sign-ins only from allowlisted apps, so it first needs Payhawk Support to allowlist the
-proxy's redirect URI. The hook for it is `McpUpstream._auth_for` in
+elicitation or roots, and it sends the upstream no credential at all.
+**Per-user upstream OAuth for `mcp` upstreams (what Payhawk needs) is not built yet**:
+Payhawk accepts sign-ins only from allowlisted apps, so it first needs Payhawk Support to
+allowlist the proxy's redirect URI. A shared upstream credential (for example one Payhawk
+API key used for every signed-in user) is deliberately not supported; whether that is
+acceptable is an open stakeholder decision ([open questions](open-questions.md)). The
+place where per-user upstream OAuth would plug in is `McpUpstream._client` in
 `src/mcp_ro_proxy/upstreams/mcp_upstream.py`.
 
 ### `server`

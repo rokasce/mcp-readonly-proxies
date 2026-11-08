@@ -370,8 +370,7 @@ async def _list_drafts(
         params.append(("pageToken", args.page_token))
     listing = await api.get("drafts", params)
     ids = [str(d["id"]) for d in cast(list[dict[str, Any]], listing.get("drafts") or [])]
-    meta_params = [("format", "metadata"), *(("metadataHeaders", h) for h in _LIST_HEADERS)]
-    drafts = await up.gather(api.get(f"drafts/{_id(i)}", meta_params) for i in ids)
+    drafts = await up.gather(api.get(f"drafts/{_id(i)}", [("format", "metadata")]) for i in ids)
     out: list[dict[str, Any]] = []
     for draft in drafts:
         message = cast(dict[str, Any], draft.get("message") or {})

@@ -291,7 +291,7 @@ async def test_mcp_upstream_over_http_never_receives_client_credentials(
         "kind": "mcp",
         "name": "payhawk",
         "url": f"{upstream_server.url}/mcp",
-        "auth": {"type": "static_bearer", "token": "upstream-service-token"},
+        "auth": {"type": "none"},
     }
     from mcp_ro_proxy.config import McpUpstreamConfig
     from mcp_ro_proxy.policy import tool_sha256
@@ -332,7 +332,7 @@ async def test_mcp_upstream_over_http_never_receives_client_credentials(
     assert calls.calls == [("list_expenses", {"limit": 1})]
     assert seen, "the upstream was never contacted"
     for headers in seen:
-        assert headers.get("authorization") == "Bearer upstream-service-token"
+        assert "authorization" not in headers
         assert key not in json.dumps(headers)
         assert "x-api-key" not in headers
         assert "cookie" not in headers

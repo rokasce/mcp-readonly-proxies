@@ -53,7 +53,9 @@ at Google, so a broader token is never stored.
   built-in Gmail connector meanwhile; that is enforced by Anthropic but the built-in
   connector's token can still send, so the Google-side controls [GWA] matter.
 - **Payhawk** (an `mcp` upstream with per-user OAuth) is not wired: Payhawk accepts
-  OAuth sign-ins only from allowlisted apps.
+  OAuth sign-ins only from allowlisted apps, and per-user upstream OAuth is not built yet.
+  The proxy sends `mcp` upstreams no credential; a shared upstream credential is an open
+  stakeholder decision ([open questions](open-questions.md)).
 
 ## Verified locally vs. needs real accounts
 

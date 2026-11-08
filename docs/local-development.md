@@ -120,7 +120,9 @@ docker run --rm -p 8080:8080 -e PUBLIC_BASE_URL=http://localhost:8080 \
 
 - **An MCP server** (for example Payhawk): write a config with `kind: mcp`, run
   `mcp-ro-proxy pins` against it, review each tool, and allowlist only read tools.
-  Upstream credentials beyond `none` / `static_bearer` (per-user OAuth) need code in
-  `McpUpstream._auth_for`.
+  The proxy sends `mcp` upstreams no credential (`auth: {type: none}`); per-user
+  upstream OAuth (Payhawk) is not built yet and would plug in at `McpUpstream._client`.
+  A shared upstream credential is an open stakeholder decision
+  ([open questions](open-questions.md)).
 - **A provider API**: add a `native` provider next to `gmail_native.py` implementing the
   `Upstream` protocol in `upstreams/base.py`, with GET-only, least-privilege calls.

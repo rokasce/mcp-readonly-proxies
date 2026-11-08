@@ -36,6 +36,9 @@ GMAIL_READONLY = "https://www.googleapis.com/auth/gmail.readonly"
 USERINFO_EMAIL = "https://www.googleapis.com/auth/userinfo.email"
 CLIENT_ID = "test-client.apps.googleusercontent.com"
 CLIENT_SECRET = "test-client-secret"
+#: Query parameters Gmail binds for drafts.list and drafts.get; any other one is a 400.
+_DRAFTS_LIST_PARAMS = frozenset({"maxResults", "pageToken", "q", "includeSpamTrash"})
+_DRAFTS_GET_PARAMS = frozenset({"format"})
 
 
 def _b64(text: str) -> str:
@@ -340,6 +343,16 @@ class FakeGoogle:
                     ]
                 }
             )
+        if parts and parts[0] == "drafts":
+            return self._gmail_drafts(parts, request)
+        return JSONResponse({"error": {"code": 404}}, status_code=404)
+
+    def _gmail_drafts(self, parts: list[str], request: Request) -> Response:
+        allowed = _DRAFTS_LIST_PARAMS if len(parts) == 1 else _DRAFTS_GET_PARAMS
+        unknown = sorted(set(request.query_params) - allowed)
+        if unknown:
+            message = f"Cannot bind query parameter {unknown[0]}"
+            return JSONResponse({"error": {"code": 400, "message": message}}, status_code=400)
         if parts == ["drafts"]:
             return JSONResponse({"drafts": [{"id": "d1", "message": {"id": "m9"}}]})
         if parts == ["drafts", "d1"]:

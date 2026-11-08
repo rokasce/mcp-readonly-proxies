@@ -115,6 +115,7 @@ async def test_labels_and_drafts(gmail: tuple[GmailNativeUpstream, Tokens]) -> N
     drafts = await call(up, "list_drafts", {})
     assert drafts["drafts"][0]["subject"] == "Draft reply"
     assert drafts["drafts"][0]["to"] == "ana@vendor.test"
+    assert drafts["drafts"][0]["date"] == "Wed, 4 Nov 2026 12:00:00 +0000"
 
 
 async def test_only_get_requests_reach_gmail(

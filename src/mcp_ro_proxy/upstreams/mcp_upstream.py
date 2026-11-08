@@ -4,8 +4,9 @@ The proxy is an ordinary MCP client of the upstream. It never forwards the MCP c
 credentials (the MCP spec forbids token passthrough), never forwards resources, prompts,
 sampling, elicitation or roots, and relays only tool results.
 
-Upstream credentials come from config (``none`` or ``static_bearer``). Per-user upstream
-OAuth (needed for Payhawk) plugs in at ``_auth_for``; it is not built yet.
+The proxy sends no credentials to the upstream (``auth: {type: none}``). Per-user upstream
+OAuth (needed for Payhawk) is not built yet; a shared upstream credential is an open
+stakeholder decision (docs/open-questions.md).
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from fastmcp.client.transports import ClientTransport, StreamableHttpTransport
 from fastmcp.tools.base import ToolResult
 from mcp.shared.exceptions import MCPError
 
-from mcp_ro_proxy.config import McpUpstreamConfig, StaticBearerUpstreamAuth
+from mcp_ro_proxy.config import McpUpstreamConfig
 from mcp_ro_proxy.upstreams.base import Principal, UpstreamError, UpstreamTool
 
 #: Transport-level failures that mean "upstream unavailable" rather than a tool result.
@@ -48,20 +49,15 @@ class McpUpstream:
     def google_scopes(self) -> frozenset[str]:
         return frozenset()
 
-    def _auth_for(self, principal: Principal | None) -> str | None:
-        del principal  # per-user upstream credentials are a follow-up (Payhawk)
-        auth = self._config.auth
-        if isinstance(auth, StaticBearerUpstreamAuth):
-            return auth.token.get_secret_value()
-        return None
-
     def _client(self, principal: Principal | None) -> Client[Any]:
         target: FastMCP[Any] | ClientTransport
         if self._target is not None:
             target = self._target
         else:
-            # Headers are exactly what we configure here; nothing from the inbound request.
-            target = StreamableHttpTransport(self._config.url, auth=self._auth_for(principal))
+            # No credentials and nothing from the inbound request. Per-user upstream OAuth
+            # (Payhawk) would plug in here, as an ``auth=`` derived from ``principal``.
+            del principal
+            target = StreamableHttpTransport(self._config.url)
         client: Client[Any] = Client(target, timeout=self._config.timeout_seconds)
         options = client._transport_options  # pyright: ignore[reportPrivateUsage]
         if options is not None and options.forward_incoming_headers:
