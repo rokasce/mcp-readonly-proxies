@@ -154,13 +154,16 @@ class Pins(Middleware):
     def __init__(self, upstream_name: str, pins: dict[str, str]):
         self._upstream_name = upstream_name
         self._pins = pins
+        # Drifted definitions already logged, so each change is logged once, not on every list.
+        self._reported: set[str] = set()
 
     def _drifted(self, tool: Tool) -> bool:
         pin = self._pins.get(tool.name)
         if pin is None:
             return False
         actual = definition_sha256(tool)
-        if actual != pin:
+        if actual != pin and actual not in self._reported:
+            self._reported.add(actual)
             logger.warning(
                 "upstream=%s tool=%s dropped: its definition changed (pinned %s, now %s)",
                 self._upstream_name,

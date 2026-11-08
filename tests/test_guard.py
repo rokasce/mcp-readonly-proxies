@@ -462,8 +462,10 @@ async def test_pinned_tool_dropped_when_its_definition_changes(
         await client.call_tool("search_threads", {})
         with pytest.raises(ToolError, match="Unknown tool"):
             await client.call_tool("get_thread", {})
+        await client.list_tools()
     assert fake_gmail.called == ["search_threads"]  # type: ignore[attr-defined]
-    assert f"now {definition_sha256(tools['get_thread'])}" in caplog.text
+    # Logged once with the hash to pin after review, not on every tools/list.
+    assert caplog.text.count(f"now {definition_sha256(tools['get_thread'])}") == 1
 
 
 async def test_long_results_are_cut(gmail_mcp: Upstream) -> None:

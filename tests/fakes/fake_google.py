@@ -172,6 +172,10 @@ class FakeGoogle:
     user: FakeUser = field(default_factory=FakeUser)
     # Scopes to grant instead of the requested ones (simulate a broad grant).
     grant_scopes: list[str] | None = None
+    # How long access tokens last; Google's is an hour.
+    access_lifetime_s: int = 3599
+    # Status userinfo answers with instead of the profile (simulate an outage).
+    userinfo_failure: int | None = None
     mailbox: dict[str, list[dict[str, Any]]] = field(default_factory=default_mailbox)
     authorize_requests: list[dict[str, str]] = field(default_factory=list[dict[str, str]])
     gmail_requests: list[tuple[str, str, str]] = field(default_factory=list[tuple[str, str, str]])
@@ -179,6 +183,8 @@ class FakeGoogle:
     mcp_calls: list[str] = field(default_factory=list[str])
     mcp_headers: list[dict[str, str]] = field(default_factory=list[dict[str, str]])
     revocations: list[str] = field(default_factory=list[str])
+    # grant_type of each token request.
+    token_grants: list[str] = field(default_factory=list[str])
     _codes: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
     _access: dict[str, tuple[Grant, float]] = field(default_factory=dict[str, tuple[Grant, float]])
     _refresh: dict[str, Grant] = field(default_factory=dict[str, Grant])
@@ -193,7 +199,7 @@ class FakeGoogle:
 
     def _new_access(self, grant: Grant) -> str:
         token = "ya29.fake-" + secrets.token_urlsafe(16)
-        self._access[token] = (grant, time.time() + 3599)
+        self._access[token] = (grant, time.time() + self.access_lifetime_s)
         return token
 
     def grant_for(self, token: str) -> Grant | None:
@@ -203,10 +209,6 @@ class FakeGoogle:
         else:
             grant = found[0] if found[1] > time.time() else None
         return None if grant is None or grant.revoked else grant
-
-    def expire_access_tokens(self) -> None:
-        for token, (grant, _) in list(self._access.items()):
-            self._access[token] = (grant, 0)
 
     def is_revoked(self, token: str) -> bool:
         found = self._access.get(token)
@@ -241,6 +243,7 @@ class FakeGoogle:
         client_id = self._client(request, form)
         if client_id is None:
             return JSONResponse({"error": "invalid_client"}, status_code=401)
+        self.token_grants.append(form.get("grant_type", ""))
         if form.get("grant_type") == "authorization_code":
             params = self._codes.pop(form.get("code", ""), None)
             if params is None or params["redirect_uri"] != form.get("redirect_uri"):
@@ -256,7 +259,7 @@ class FakeGoogle:
             grant = Grant(self.grant_scopes or requested, self.user, client_id)
             body: dict[str, Any] = {
                 "access_token": self._new_access(grant),
-                "expires_in": 3599,
+                "expires_in": self.access_lifetime_s,
                 "token_type": "Bearer",
                 "scope": " ".join(grant.scopes),
             }
@@ -272,7 +275,7 @@ class FakeGoogle:
             return JSONResponse(
                 {
                     "access_token": self._new_access(grant),
-                    "expires_in": 3599,
+                    "expires_in": self.access_lifetime_s,
                     "token_type": "Bearer",
                     "scope": " ".join(grant.scopes),
                 }
@@ -300,6 +303,8 @@ class FakeGoogle:
         )
 
     async def userinfo(self, request: Request) -> Response:
+        if self.userinfo_failure:
+            return JSONResponse({"error": "backend_error"}, status_code=self.userinfo_failure)
         grant = self._bearer(request)
         if grant is None:
             return JSONResponse({"error": "invalid_token"}, status_code=401)

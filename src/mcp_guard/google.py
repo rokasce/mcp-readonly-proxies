@@ -114,14 +114,19 @@ class ScopeLimitedTokenVerifier(TokenVerifier):
                     return None
                 # The Workspace domain (hd) only comes from userinfo.
                 user = await http.get(self._endpoints.userinfo, headers=bearer)
-                user_data = cast(dict[str, Any], user.json()) if user.status_code == 200 else {}
         except httpx2.HTTPError as exc:
             logger.warning("Couldn't check a token with Google: %s", exc)
             return None
+        if user.status_code != 200:
+            # Without hd the domain check would refuse the person; a passing userinfo hiccup
+            # mustn't lock them out for the cache's lifetime, so this result isn't kept.
+            logger.warning("Couldn't read the person's Google profile (%s)", user.status_code)
+            return None
+        user_data = cast(dict[str, Any], user.json())
         claims = verified.claims
         claims["email"] = claims.get("email") or user_data.get("email")
         claims["email_verified"] = claims.get("email_verified") or user_data.get("verified_email")
-        verified.claims["google_user_data"] = user_data or None
+        claims["google_user_data"] = user_data
         self._cache.set(token, verified)
         return verified
 
@@ -171,7 +176,7 @@ class GoogleSignIn(OAuthProxy):
         client_id: str,
         client_secret: str,
         base_url: str,
-        verifier: "ScopeLimitedTokenVerifier",
+        verifier: ScopeLimitedTokenVerifier,
         allowed_domain: str,
         client_redirect_uris: list[str],
         client_storage: AsyncKeyValue,

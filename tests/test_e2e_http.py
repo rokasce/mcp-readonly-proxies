@@ -2,6 +2,7 @@
 real ports, an MCP client signing in the way Claude Code does (dynamic registration, a localhost
 callback, the guard's consent page, Google), and nexos-style personal keys."""
 
+import asyncio
 import json
 import logging
 import os
@@ -131,6 +132,17 @@ async def test_claude_code_style_sign_in_and_calls(gmail: Deployment) -> None:
     assert gmail.google.fake.write_attempts == []
 
 
+async def test_sign_in_outlives_googles_access_token(gmail: Deployment) -> None:
+    """Google's access tokens last an hour; the client then refreshes through the guard, which
+    refreshes at Google, and the new token goes through the same checks."""
+    gmail.google.fake.access_lifetime_s = 2
+    async with Client(StreamableHttpTransport(gmail.mcp, auth=HeadlessOAuth(gmail.mcp))) as client:
+        await client.call_tool("list_labels", {})
+        await asyncio.sleep(3)
+        await client.call_tool("list_labels", {})
+    assert gmail.google.fake.token_grants == ["authorization_code", "refresh_token"]
+
+
 async def test_sign_in_with_too_much_access_fails_and_is_revoked(gmail: Deployment) -> None:
     gmail.google.fake.grant_scopes = [
         "openid",
@@ -245,6 +257,21 @@ async def test_personal_key_reads_gmail(
     assert audit[0]["client"] == "personal_key"
     assert audit[0]["person"] == "pat@example.com"
     assert gmail.google.fake.write_attempts == []
+
+
+async def test_personal_key_outlives_googles_access_token(gmail: Deployment) -> None:
+    key = await create_key(gmail)
+    # Refreshed this long before it expires, so the guard's copy is good for 2 seconds.
+    gmail.google.fake.access_lifetime_s = 122
+    for _ in range(2):
+        assert await mcp_status(gmail, key) == 200
+    await asyncio.sleep(3)
+    assert await mcp_status(gmail, key) == 200
+    assert gmail.google.fake.token_grants == [
+        "authorization_code",
+        "refresh_token",
+        "refresh_token",
+    ]
 
 
 async def test_new_key_replaces_old_and_revoke_works(gmail: Deployment) -> None:

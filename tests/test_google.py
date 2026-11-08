@@ -69,6 +69,15 @@ async def test_consumer_account_has_no_workspace_domain(google: Google) -> None:
     assert verified.claims["google_user_data"].get("hd") is None  # the domain check refuses it
 
 
+async def test_profile_outage_refuses_without_locking_out(google: Google) -> None:
+    verifier = deployed(google)
+    token = google.fake.issue(READ_ONLY)
+    google.fake.userinfo_failure = 503
+    assert await verifier.verify_token(token) is None  # no hd known, so no way in
+    google.fake.userinfo_failure = None
+    assert await verifier.verify_token(token) is not None  # the refusal wasn't cached
+
+
 async def test_revoked_grant_stops_working(google: Google) -> None:
     verifier = deployed(google)
     token = google.fake.issue(READ_ONLY)
