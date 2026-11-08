@@ -1,97 +1,148 @@
-# mcp-readonly-proxies
+# MCP Guard
 
-Read-only access control for MCP connectors (Gmail, Payhawk) in Claude and nexos.ai: research findings, admin runbooks and, later, allowlisting MCP proxies.
+MCP Guard gives Claude (Claude.ai, Desktop, mobile, Claude Code) and nexos.ai read-only Gmail.
+Agents connect to the guard instead of Gmail and see only the read-only tools allowed in
+`guard.yaml`. Every other tool, including any Gmail adds later, is hidden and refused.
+[Research](#research) explains why a proxy is needed.
 
-> **Status:** the first proxy is now **built** in this repo: a Gmail native upstream with personal-key auth for nexos.ai (see [Read-only proxy](#read-only-proxy)). Claude OAuth connector mode, Payhawk wiring and any real deployment are still open (see [docs/open-questions.md](docs/open-questions.md)). The broader design in [docs/proxy-design.md](docs/proxy-design.md) remains a proposal.
+## How it works
 
-All sources were checked on **2026-11-08**.
+```
+Claude / nexos.ai  --MCP-->  MCP Guard  --person's gmail.readonly token-->  Gmail
+                             (allowlist, domain check, audit log, limits)
+```
 
-## Bottom line
+- **Own mailbox only.** Each person signs in with Google through the guard, which calls Gmail with
+  their own token.
+- **Read-only at Google.** Sign-in asks only for `gmail.readonly`. A token holding more
+  (`gmail.modify`, `https://mail.google.com/`, ...) is refused and revoked, so Google refuses
+  changes even if a tool were allowed by mistake.
+- **One company.** Only verified accounts of the company's Workspace domain get through.
+- **Audit.** One JSON line per tool call: who, which tool, allowed or not, outcome, duration.
+  Arguments and mail are never logged.
+- **Allowed tools:** `search_threads`, `get_thread`, `get_message`, `list_drafts`, `get_draft`,
+  `list_labels`. Everything else (sending, creating drafts or labels, labelling, trash, spam) is
+  blocked.
 
-On both Claude **Team** and **Enterprise**, the built-in Gmail connector can be made read-only for the whole org: an Owner sets its write tools (or the whole write/delete group) to **Blocked**, Anthropic enforces this on its servers across claude.ai web, Desktop, mobile and Claude Code, and members cannot override it. But this is **not a read-only credential**: the connector's Google grant still holds send permission (`gmail.compose`), so the guarantee lives entirely in Anthropic's policy layer. A **credential-level guarantee** needs an OAuth token that holds only `gmail.readonly`, which you can only get with an **OAuth client you own** (Google's own Gmail MCP server, or your own read-only proxy), with a Google Workspace admin blocking Anthropic's "Claude for Gmail" app. **nexos.ai** has only whole-integration Active / Inactive; the only enforced read-only Gmail there is a read-only MCP server added as a custom MCP. Payhawk's official MCP can be write-blocked in Claude by the same org tool policy; a self-hosted Payhawk proxy needs Payhawk Support to allowlist its redirect URI.
+**Claude:** add `https://<guard>/mcp` as a connector, then sign in with Google. **nexos.ai:** each
+person makes a personal API key on the guard's `/keys` page ([docs/nexos-setup.md](docs/nexos-setup.md)).
 
-**Our plan:** believed to be **Claude Team** (from the onboarding email), pending confirmation (see [stakeholder question 1](docs/questions-for-stakeholders.md#claude-admins-owners)).
+## Gmail API or Gmail MCP
 
-**Team-plan gap:** on Team there is no verified-domain restriction, so a member's personal Claude account can connect work Gmail outside the org policy. Closing that requires the Google Workspace admin to block "Claude for Gmail" at Google [GWA] ([runbook](docs/runbooks/google-workspace-admin.md#2-set-the-access-level-for-claude-for-gmail)), with Gmail then reached only through the read-only proxy added by an Owner as a custom connector.
+| `kind` in `guard.yaml` | Upstream | Status |
+|---|---|---|
+| `gmail_api` (**default**, upstream `gmail`) | [Gmail REST API](https://developers.google.com/workspace/gmail/api/reference/rest) via the guard's own six tools | Generally available |
+| `mcp` (upstream `gmail-mcp`) | Google's [Gmail MCP server](https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server), filtered to its read-only tools | Developer Preview |
 
-## Comparison of solutions
+**Use the Gmail API for now.** Gmail MCP needs preview enrolment, runs under preview terms, and
+Google asks for prompt-injection screening (e.g. Model Armor) in front of it. Both use the same
+`gmail.readonly` token and tool names, so agents see no difference.
 
-"Enforced" means a technical control rejects the action. "Advisory" means it relies on a person clicking correctly, or on a hint. "Bypassable" means a normal member can get around it.
+**To switch** once Gmail MCP is generally available, set `MCP_GUARD_UPSTREAM=gmail-mcp` and do
+this on the Google side:
 
-| # | Solution | Surfaces / plans | Enforced? | Bypassable by a member? | Effort | Reference |
-|---|---|---|---|---|---|---|
-| 1 | **Claude org-wide tool policy:** set Gmail write tools to **Blocked** | claude.ai web, Desktop (chat, Cowork, Code tab), mobile, Claude Code (connectors fetched from claude.ai); **Team + Enterprise** | **Enforced by Anthropic server-side.** Not a credential limit: the Google token can still send | No, members can't override. Escape routes: a personal Claude account (Team), or another client using its own Gmail access | Low | [Use connectors](https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities), [Custom roles](https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans), [Claude Code MCP](https://code.claude.com/docs/en/mcp.md#organization-controls-on-connector-tools) |
-| 2 | **Enterprise custom roles:** connector and per-tool grants (Always allow / Needs approval / Blocked) | Same surfaces; **Enterprise only** | Enforced server-side. The org policy (row 1) is the ceiling. Grants add up across roles | No | Low-Med | [Custom roles](https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans) |
-| 3 | Claude tool set to **Needs approval** (org or role) | Same | **Advisory** (a human must click). Research mode calls tools "without further approval". Community reports say approvals were skipped in Claude Code | Member can approve | Low | [Custom connectors](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp), GitHub [#89304](https://github.com/anthropics/claude-code/issues/89304) |
-| 4 | Member's own per-chat connector toggle and personal tool permissions | All plans | Advisory | Yes | None | [Get started with connectors](https://claude.com/docs/connectors/getting-started.md) |
-| 5 | **Claude Code managed permission deny rules**, e.g. `mcp__claude_ai_Gmail__send_message` | Claude Code CLI, IDE, Agent SDK; server-managed settings on **Team + Enterprise**; MDM file on any plan | Enforced by the client | With MDM: no. Server-managed only: yes, by switching auth to an API key or gateway. Does **not** match in Desktop local sessions (community #92787) | Low | [Permissions](https://code.claude.com/docs/en/permissions.md), [Server-managed settings](https://code.claude.com/docs/en/server-managed-settings.md) |
-| 6 | **Claude Code managed MCP allowlist / denylist**: `allowManagedMcpServersOnly`, `allowedMcpServers`, `deniedMcpServers`, `managed-mcp.json` | Claude Code | Enforced by the client | With MDM: no. Server-managed only: same escape as row 5 | Low | [Managed MCP](https://code.claude.com/docs/en/managed-mcp.md) |
-| 7 | **Claude Code managed PreToolUse hook** that denies `mcp__.*__(send\|reply\|forward\|trash\|...)`, plus `allowManagedHooksOnly` | Claude Code | Enforced by the client | With MDM: no | Med | [Permissions: hooks](https://code.claude.com/docs/en/permissions.md#extend-permissions-with-hooks), [Settings reference](https://code.claude.com/docs/en/settings-reference.md) |
-| 8 | **Claude Desktop policies**: `isLocalDevMcpEnabled=false`, block or allowlist desktop extensions, `forceLoginOrgUUID` | Claude Desktop; Team via MDM; Enterprise via MDM or Organization settings | Enforced by the client | With MDM: no | Low | [Desktop enterprise config](https://support.claude.com/en/articles/12622667-enterprise-configuration-for-claude-desktop), [Local MCP](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop) |
-| 9 | Claude API MCP connector `mcp_toolset` allowlist (`default_config.enabled:false` + `configs`); Agent SDK `allowed_tools` / `disallowed_tools` / `canUseTool` | Claude API, Agent SDK | Enforced by API and your code | Developer-controlled | Low | [MCP connector](https://platform.claude.com/docs/en/agents-and-tools/mcp-connector.md), [SDK permissions](https://code.claude.com/docs/en/agent-sdk/permissions.md) |
-| 10 | **nexos.ai**: integration Active / Inactive | nexos Workspace, Chat and Agents | Enforced (whole integration only) | No | Low | [Workspace Integrations](https://docs.nexos.ai/workspace/integrations.md) |
-| 11 | nexos.ai Human-in-the-Loop approvals | nexos Agents (changelog says chat too) | Advisory | Yes ("Always approve", per-agent toggle) | Low | [HITL](https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals.md) |
-| 12 | **OAuth token with only `gmail.readonly`** (requires your own OAuth client) | Any client | **Hard: Google rejects writes** | No | Med | [Gmail API scopes](https://developers.google.com/workspace/gmail/api/auth/scopes) |
-| 13 | **Google Workspace API controls** [GWA]: per app Trusted / Limited / **Specific Google data** / **Blocked**; Gmail service Restricted; unconfigured-app policy | Any client that uses Google OAuth; any Workspace edition with API controls | **Hard (Google)** | No | Low for the admin | [Control which apps access Workspace data](https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data) |
-| 14 | Service account with domain-wide delegation, scoped to `gmail.readonly` [GWA, super admin] | Server-side apps | Hard scope floor, but can **impersonate any user** | No | Med | [Domain-wide delegation](https://support.google.com/a/answer/162106) |
-| 15 | **Google's Gmail MCP server** (Developer Preview) as a Claude custom connector, with your own Internal OAuth client | Claude web/desktop custom connector, Claude Code; nexos unlikely (its custom MCP auth is API keys) | Hard **if** the token is readonly-only (needs a test); plus Claude tool policy | No | Med | [Configure Gmail MCP](https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server) |
-| 16 | **Custom read-only proxy / MCP server** ([proxy design](docs/proxy-design.md)) | Claude web/desktop, Claude Code, nexos, anything that speaks MCP | **Hard**: tools not exposed, default-deny, and `gmail.readonly` token | No, once the built-in connector is blocked | Med-High | [docs/proxy-design.md](docs/proxy-design.md) |
-| 17 | MCP tool annotations (`readOnlyHint`, `destructiveHint`) | All | **Advisory hints only.** The spec says clients MUST treat them as untrusted | n/a | None | [MCP tools spec](https://modelcontextprotocol.io/specification/2026-07-28/server/tools.md) |
-| 18 | **Cloudflare MCP server portals** (managed gateway) with `default_disabled: true` allowlist and per-user upstream OAuth (own OAuth client, chosen scopes) | Any MCP client that does OAuth (Claude setup is documented); needs Cloudflare Zero Trust and a domain on Cloudflare | Enforced at the gateway: "Turned-off tools will not appear ... Users will not be able to call them". Upstream scope floor if the upstream OAuth requests only `gmail.readonly` | No | Med (configuration, no code) | [MCP portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/) |
-| 19 | Other gateways (agentgateway, ContextForge, Docker MCP Gateway) | Depends | Enforced at the gateway | No | Med-High | [Build vs buy](docs/proxy-design.md#reuse-an-existing-gateway-or-build) |
+1. Enable the Gmail MCP API (`gmailmcp.googleapis.com`) in the OAuth client's Cloud project.
+2. Tick **Use this client for an AI-powered agent** on the OAuth client (Google Auth Platform >
+   Clients). If the client can't take it, create a new one and update the client ID and secret.
+3. Check Google's terms then. In preview: enrolment, and screening prompts and responses for
+   prompt injection (Model Armor or your own documented solution).
+4. Compare the live `tools/list` with the allowlist. Google's public reference lists fewer tools
+   than `tests/fixtures/gmail_tools.json` (`get_draft` is missing).
+5. Pin the tool definitions ([`pins`](docs/configuration.md#pins)) so a changed tool is dropped
+   until reviewed.
 
-[GWA] marks a step that needs a Google Workspace admin; see [the Workspace admin runbook](docs/runbooks/google-workspace-admin.md).
+## Settings
+
+`MCP_GUARD_UPSTREAM` is always required; the next three rows are required outside `--dev`.
+
+| Variable | What it sets |
+|---|---|
+| `MCP_GUARD_UPSTREAM` | Upstream from `guard.yaml`: `gmail` or `gmail-mcp` |
+| `MCP_GUARD_BASE_URL` | The guard's public https URL; Google redirects back to it |
+| `MCP_GUARD_GOOGLE_CLIENT_ID`, `MCP_GUARD_GOOGLE_CLIENT_SECRET` | Google OAuth client, see [DEPLOY.md](DEPLOY.md#1-google-oauth-client-needed-for-any-deployment) |
+| `MCP_GUARD_ALLOWED_DOMAIN` | e.g. `example.com`; must equal the account's Google `hd` claim |
+| `MCP_GUARD_JWT_SIGNING_KEY` | Signs the guard's tokens. Default: derived from the client secret, so rotating that secret signs everyone out |
+| `MCP_GUARD_CLIENT_REDIRECT_URIS` | Comma-separated callbacks MCP clients may register; replaces the default, which is Claude only (`https://claude.ai/api/mcp/auth_callback`, `https://claude.com/api/mcp/auth_callback`, `http://localhost:*/callback`, `http://127.0.0.1:*/callback`) |
+| `MCP_GUARD_PERSONAL_KEYS` | `true` serves `/keys` and accepts personal keys on `/mcp`. Default `false` |
+| `MCP_GUARD_STORAGE_URL` | Sign-in and key storage: `redis://` or `rediss://` (for more than one replica), `file:///path`, or `memory://` (lost on restart). Default: files under `FASTMCP_HOME` |
+| `MCP_GUARD_STORAGE_ENCRYPTION_KEYS` | Comma-separated Fernet keys; the first encrypts, all decrypt. Default: derived from the JWT signing key |
+| `MCP_GUARD_CONFIG` | Default `guard.yaml` |
+| `MCP_GUARD_HOST`, `MCP_GUARD_PORT` | Default `0.0.0.0:3000` (`127.0.0.1` with `--dev`) |
+| `FASTMCP_HOME` | State directory when no storage URL is set; must be writable and persistent |
+
+An unknown `MCP_GUARD_*` variable or a bad `guard.yaml` stops the guard at startup
+([docs/configuration.md](docs/configuration.md)).
+
+## Local test mode (no OAuth client)
+
+`--dev` skips the sign-in: each request carries a Google token in `Authorization: Bearer`, which
+the guard checks with Google. It needs `gmail.readonly` and `userinfo.email` (`openid` optional);
+any other scope gets it refused. It listens on 127.0.0.1 only.
+
+1. In [OAuth Playground](https://developers.google.com/oauthplayground), authorize
+   `https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email`
+   and exchange the code for tokens. Copy the access token (valid 1 hour).
+2. Run `uv run python scripts/playground_check.py --domain example.com` (no `--domain` for a
+   personal account). It checks the six tools work and write tools are refused.
+3. Or use it from Claude Code:
+   `MCP_GUARD_UPSTREAM=gmail MCP_GUARD_ALLOWED_DOMAIN=example.com uv run mcp-guard --dev`, then
+   `claude mcp add --transport http gmail http://localhost:3000/mcp --header "Authorization: Bearer <token>"`
+
+A deployment never uses Playground ([DEPLOY.md](DEPLOY.md#scopes)). To try the full sign-in
+without an OAuth client, use the fake Google ([docs/local-development.md](docs/local-development.md)).
+
+## Run and test
+
+```bash
+uv sync
+uv run pytest          # fake Google, Gmail API and Gmail MCP; no Google needed
+uv run ruff check . && uv run ruff format --check . && uv run pyright
+uv run mcp-guard --port 3000
+curl localhost:3000/health   # {"status":"ok","upstream":"gmail"}
+docker build -t mcp-guard .  # runs the tests in its test stage
+```
+
+## Status
+
+- **Tried:** `--dev` against real Gmail (`scripts/playground_check.py` passed); the full sign-in
+  against a fake Google, end to end with Claude Code and a personal key.
+- **Not yet:** deployed or tried with real Google sign-in ([DEPLOY.md](DEPLOY.md)).
+- **Before rollout:** the decisions and questions for leadership in
+  [docs/questions.md](docs/questions.md), and the risks in
+  [DEPLOY.md, Things to keep in mind](DEPLOY.md#things-to-keep-in-mind).
+- **Not built:** Payhawk ([docs/runbooks/payhawk.md](docs/runbooks/payhawk.md)), and argument
+  checks. The allowlist is by tool name, enough while every allowed tool is read-only whatever its
+  arguments.
+
+## Research
+
+How to restrict MCP tools in Claude and nexos.ai (checked 2026-11-08):
+
+- **Claude Team and Enterprise:** an Owner can block the built-in Gmail connector's write tools
+  on every Claude surface. But its Google grant can still send (`gmail.compose`), so read-only
+  rests on Anthropic's policy, not the credential.
+- **A credential-level guarantee** needs a token with only `gmail.readonly`, so an OAuth client
+  you own (this guard), with the Workspace admin blocking Anthropic's "Claude for Gmail" app.
+- **On Team**, a member's personal Claude account can still connect work Gmail until "Claude for
+  Gmail" is blocked at Google. Our plan is believed to be Team, pending confirmation.
+- **nexos.ai** can only turn an integration on or off, so read-only Gmail needs a custom MCP like
+  this guard.
+
+Full research, the options compared and the evidence: [docs/findings.md](docs/findings.md).
 
 ## Documents
 
-| Document | What it covers | Audience |
-|---|---|---|
-| [docs/findings.md](docs/findings.md) | Full research findings with references and evidence labels | Anyone deciding |
-| [docs/proxy-design.md](docs/proxy-design.md) | Proposed design for a generic default-deny allowlisting proxy (Gmail, Payhawk) | Engineers; pending decisions |
-| [docs/open-questions.md](docs/open-questions.md) | Decisions that would change the recommendation | Decision makers |
-| [docs/questions-for-stakeholders.md](docs/questions-for-stakeholders.md) | Questions to ask each admin group before rollout, linked to the relevant sections | Everyone involved |
-| [docs/runbooks/google-workspace-admin.md](docs/runbooks/google-workspace-admin.md) | Every step that needs a Google Workspace admin | Workspace admins |
-| [docs/runbooks/claude-org.md](docs/runbooks/claude-org.md) | Claude Owner steps on Team and Enterprise | Claude Owners |
-| [docs/runbooks/claude-code-managed-settings.md](docs/runbooks/claude-code-managed-settings.md) | Claude Code managed MCP allowlist / denylist, deny rules, hooks | IT, Claude Owners |
-| [docs/runbooks/nexos.md](docs/runbooks/nexos.md) | nexos.ai Owner steps | nexos Owners |
-| [docs/runbooks/payhawk.md](docs/runbooks/payhawk.md) | Payhawk MCP options, tool classification, Support request | Claude Owners, finance admins |
-| [docs/local-development.md](docs/local-development.md) | Proxy quick start, tests, trying it with Claude Code | Engineers |
-| [docs/configuration.md](docs/configuration.md) | Proxy config reference, pins, audit log | Engineers |
-| [docs/deploy.md](docs/deploy.md) | Google OAuth client, Cloud Run, Secret Manager, Cloud SQL | Engineers, Workspace admins |
-| [docs/nexos-setup.md](docs/nexos-setup.md) | Adding the proxy to nexos.ai | nexos Owners |
-| [docs/security-model.md](docs/security-model.md) | Proxy guarantees, threats, what is not verified yet | Anyone deciding |
+| Document | What it covers |
+|---|---|
+| [DEPLOY.md](DEPLOY.md) | Deploying and connecting the guard |
+| [docs/configuration.md](docs/configuration.md) | `guard.yaml`: upstreams, allowlist, pins, limits, audit line |
+| [docs/local-development.md](docs/local-development.md) | Tests, fake Google, full sign-in locally |
+| [docs/nexos-setup.md](docs/nexos-setup.md) | nexos.ai: Owner setup and personal keys |
+| [docs/security-model.md](docs/security-model.md) | Guarantees, threats, what isn't verified |
+| [docs/proxy-design.md](docs/proxy-design.md) | Design, auth flows, build vs buy |
+| [docs/findings.md](docs/findings.md) | Full research with references |
+| [docs/questions.md](docs/questions.md) | Decisions and questions for leadership |
+| Runbooks | Admin steps: [Google Workspace](docs/runbooks/google-workspace-admin.md), [Claude org](docs/runbooks/claude-org.md), [Claude Code managed settings](docs/runbooks/claude-code-managed-settings.md), [Payhawk](docs/runbooks/payhawk.md) |
 
-## Read-only proxy
-
-`mcp-ro-proxy` is a default-deny, allowlisting MCP proxy: one Python codebase (FastMCP),
-one YAML config and one deployment per upstream. The first upstream is Gmail, implemented
-natively on the Gmail API with each user's own Google token that holds only
-`gmail.readonly`. Users sign in with Google on the proxy's page and get a revocable
-personal key for nexos.ai custom MCP. Tools are exposed only when allowlisted and their
-definition matches a pinned hash; every call is re-checked and audited.
-
-```sh
-uv sync && uv run pytest -q
-uv run python -m tests.fakes.fake_google --port 9000      # fake Google, for local trials
-uv run mcp-ro-proxy serve --config config/examples/gmail-fake-google.yaml   # see docs
-```
-
-- [docs/local-development.md](docs/local-development.md): quick start, tests, trying it with Claude Code
-- [docs/configuration.md](docs/configuration.md): config reference, pins, audit log
-- [docs/deploy.md](docs/deploy.md): Google OAuth client, Cloud Run, Secret Manager, Cloud SQL
-- [docs/nexos-setup.md](docs/nexos-setup.md): adding the proxy to nexos.ai
-- [docs/security-model.md](docs/security-model.md): guarantees, threats, what is not verified yet
-
-## Reading view
-
-[docs/site/index.html](docs/site/index.html) presents all of these documents on one page: a table of contents, a filterable and sortable comparison table, the screenshots, rendered diagrams, collapsible runbooks, light and dark mode, and a print layout. The Markdown files stay the source of truth; the HTML is generated from them.
-
-- **Open it locally:** clone the repo and open `docs/site/index.html` in a browser (double-click it, or `xdg-open docs/site/index.html` / `open docs/site/index.html`). It needs no server; it loads Mermaid from a CDN to draw the diagrams, so be online.
-- **Regenerate after editing the Markdown:** `uv run docs/site/build.py`.
-- It will also be shared as a hosted page.
-
-## Evidence labels
-
-- **Verified** = stated in official vendor docs (link given).
-- **Community** = observed by users in public bug reports (GitHub issues), not stated by the vendor.
-- **Inferred** = reasoning from the docs; not stated anywhere. Needs a test before you rely on it.
+All of these are also on one page: [docs/site/index.html](docs/site/index.html) (generated by
+`uv run docs/site/build.py`).

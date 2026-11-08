@@ -1,315 +1,125 @@
-# Proxy design (proposal)
+# Proxy design
 
-> **Status: proposal, partly built.** The Gmail native upstream with personal-key auth for nexos.ai is built in this repo ([configuration.md](configuration.md), [security-model.md](security-model.md)). Claude OAuth connector mode, Payhawk wiring and any real deployment are still open (see [open-questions.md](open-questions.md)). Sources checked on 2026-11-08; evidence labels as in [findings.md](findings.md#scope).
+This is the design of [MCP Guard](../README.md), the read-only proxy built in this repo, and the reasons behind it. Deployment and Payhawk are still open ([DEPLOY.md](../DEPLOY.md#open-items)). Research and evidence labels: [findings.md](findings.md). Sources checked on 2026-11-08.
 
 ## One generic proxy, one deployment per upstream
 
-**Recommendation: one codebase, a generic default-deny allowlisting proxy with per-upstream config, deployed as one endpoint per upstream** (e.g. `gmail-ro.example.com/mcp`, `payhawk-ro.example.com/mcp`).
+**One codebase:** a default-deny allowlisting proxy with per-upstream config. **One endpoint per upstream**, e.g. `gmail-guard.example.com/mcp` and later `payhawk-guard.example.com/mcp`.
 
-Why separate endpoints rather than one aggregated endpoint:
+- **Separate endpoints:** each Claude connector is one URL with one sign-in (Google for Gmail, Payhawk for Payhawk). Splitting keeps secrets and blast radius apart, and each can be enabled, blocked or audited on its own.
+- **One codebase:** the safety-critical parts (allowlist, pins, audit, auth) are written and tested once.
 
-- Each Claude custom connector is one URL with one sign-in. Gmail needs Google sign-in; Payhawk needs a Payhawk sign-in. Splitting them keeps auth flows, OAuth clients, secrets and blast radius separate.
-- Each can be enabled, blocked or audited on its own in Claude org settings, Claude Code allowlists and nexos.
-- Aggregating would force one consent to cover several upstream identities and would merge tool namespaces.
+Two upstream kinds share the same policy core:
 
-Why one codebase rather than one bespoke server per upstream:
+1. **`gmail_api`** (default for Gmail): the guard's own six read-only tools on the GA Gmail API (`search_threads`, `get_thread`, `get_message`, `list_labels`, `list_drafts`, `get_draft`), named like Gmail MCP's.
+2. **`mcp`**: the guard is an MCP client to an existing server (Google's Gmail MCP; Payhawk later) and filters its tools.
 
-- The safety-critical parts (allowlist enforcement, schema pinning, audit, auth plumbing) are identical, and should be written and tested once.
+### Gmail: Gmail API vs Google's Gmail MCP
 
-There are two **upstream kinds** behind the same policy core:
-
-1. **`mcp` upstream:** the proxy is an MCP client to an existing server (Payhawk MCP; Google Gmail MCP once acceptable). Tools are filtered and pinned.
-2. **`native` upstream:** the proxy implements a few read-only tools itself against the provider API with a least-privilege token. Example: Gmail API with `gmail.readonly`; `search_threads`, `get_thread`, `get_message`, `list_labels`, optional `list_drafts`.
-
-### Gmail: native adapter vs Google's Gmail MCP
-
-For Gmail, **native is the recommended default**:
-
-- The Gmail API is GA, while Google's MCP is Developer Preview.
-- We control the exact read surface.
-- The token floor is the same.
-- Switching to proxying Google's MCP later is a config change.
-
-| | Native adapter (Gmail API) | Proxy Google's Gmail MCP |
+| | Gmail API (`gmail_api`, default) | Google's Gmail MCP (`mcp`) |
 |---|---|---|
-| Upstream maturity | GA | Developer Preview, needs program enrollment ([Configure Gmail MCP](https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server)) |
-| Read surface | Exactly the five tools we implement | Upstream's tools, filtered by allowlist and pins |
-| Token floor | `gmail.readonly` | `gmail.readonly` (if the OAuth client requests only that) |
-| Kind | `native` | `mcp` |
+| Maturity | GA | Developer Preview, with extra Google setup ([findings 6.3](findings.md#63-googles-own-gmail-mcp-server-developer-preview)) |
+| Read surface | Exactly our six tools | Upstream's tools, filtered by allowlist and optional pins |
+| Token floor | `gmail.readonly` | `gmail.readonly` |
+
+Switching is a config change (`MCP_GUARD_UPSTREAM=gmail-mcp`; [README](../README.md#gmail-api-or-gmail-mcp)).
 
 ### Payhawk
 
-Payhawk is an `mcp` upstream in front of `https://mcp.payhawk.com/mcp`, with the read allowlist from the [Payhawk tool classification](runbooks/payhawk.md#tool-classification-82-tools). Per-user Payhawk OAuth from the proxy is **blocked today** by Payhawk's redirect-URI allowlist and needs Payhawk Support to allow the proxy's redirect URI (see [upstream auth](#how-the-proxy-authenticates-upstream) and [runbooks/payhawk.md](runbooks/payhawk.md)). If only Claude needs Payhawk, no proxy is needed: add Payhawk directly as a custom connector and Block its write tools.
+Payhawk would be an `mcp` upstream in front of `https://mcp.payhawk.com/mcp`, allowing the read tools from the [tool classification](runbooks/payhawk.md#tool-classification-82-tools). Not wired yet: an `mcp` upstream receives the person's Google token, while Payhawk needs its own per-person sign-in, which Payhawk refuses until Support allowlists the guard's redirect URI ([upstream auth](#how-the-proxy-authenticates-upstream)). For Claude only, skip the proxy and Block Payhawk's write tools in Claude.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph Clients
-    CW["Claude web / desktop / mobile<br/>(via Anthropic cloud)"]
-    CC["Claude Code<br/>(claude.ai connector or managedMcpServers)"]
-    NX["nexos.ai custom MCP<br/>(per-user key)"]
-  end
-
-  subgraph GP["gmail-ro proxy"]
-    GPC["policy core:<br/>default-deny allowlist,<br/>schema pin, call-time re-check,<br/>audit log"]
-    GTS[("encrypted token store<br/>(per user)")]
-  end
-
-  subgraph PP["payhawk-ro proxy"]
-    PPC["policy core<br/>(same image, other config)"]
-  end
-
-  CW -- "Streamable HTTP + OAuth 2.1" --> GPC
-  CC -- "Streamable HTTP + OAuth 2.1" --> GPC
-  NX -- "Streamable HTTP + personal key" --> GPC
-  GPC --- GTS
-  GPC -- "per-user gmail.readonly token" --> GAPI["Gmail API"]
-
-  PPC -- "per-user Payhawk OAuth token" --> PMCP["Payhawk MCP<br/>mcp.payhawk.com/mcp"]
+  CW["Claude web / desktop / mobile"] -- "Streamable HTTP + OAuth" --> G
+  CC["Claude Code"] -- "Streamable HTTP + OAuth" --> G
+  NX["nexos.ai custom MCP"] -- "Streamable HTTP + personal key" --> G
+  G["gmail guard:<br/>allowlist, scope check,<br/>domain check, audit"] --- S[("encrypted store (Redis):<br/>sign-ins, Google tokens, key hashes")]
+  G -- "person's gmail.readonly token" --> API["Gmail API"]
 ```
 
 ## Transport and hosting
 
-- **Transport:** Streamable HTTP only. Claude custom connectors, Claude Code `--transport http` and nexos custom MCP all support it; nexos supports only that.
-- **Reachability:** claude.ai custom connectors are called from Anthropic's cloud, so the proxy must be publicly reachable. Optionally firewall to Anthropic's IP ranges, plus nexos IPs (on request from nexos). Or keep it private behind Claude [MCP tunnels](https://claude.com/docs/connectors/mcp-tunnels/overview.md). nexos needs internet reachability either way.
-- **Recommended host: Google Cloud Run** in a GCP project owned by the same Workspace org that owns the OAuth client.
-  - This is what makes the Internal consent screen possible, so no restricted-scope verification.
-  - Secret Manager holds the OAuth client secret, JWT signing key and token-encryption key.
-  - Managed TLS and Cloud Logging for audit.
-  - Redis (Memorystore) or Firestore stores OAuth state and per-user upstream tokens, encrypted.
-- **Alternatives:** AWS ECS Fargate, Fly.io, Kubernetes. Anything that runs a container behind HTTPS.
+- **Transport:** Streamable HTTP only. Claude, Claude Code and nexos all support it; nexos supports nothing else.
+- **Reachability:** claude.ai and nexos call it from their clouds, so it must be public (optionally firewalled to their IPs); Claude also offers [MCP tunnels](https://claude.com/docs/connectors/mcp-tunnels/overview.md).
+- **Host:** any container platform behind HTTPS. The OAuth client must live in a GCP project owned by our Workspace org (Internal consent screen, so no restricted-scope verification); secrets come from a secret store; replicas share Redis ([DEPLOY.md](../DEPLOY.md)).
 
 ## How users authenticate to the proxy
 
-- **Claude (web, desktop, Claude Code):** the proxy acts as an **OAuth 2.1 authorization server** for MCP clients (protected resource metadata, DCR and/or CIMD, PKCE, consent screen). It **issues its own tokens**. On Gmail, signing in to the proxy is the Google sign-in, requesting `openid email https://www.googleapis.com/auth/gmail.readonly`, with `access_type=offline` so a refresh token is returned. Google notes that without it users re-auth hourly. Reject accounts whose `hd` claim isn't your Workspace domain.
-  - FastMCP's `OAuthProxy` / `GoogleProvider` implements exactly this "token factory" pattern. It issues its own JWTs, stores upstream tokens Fernet-encrypted, and shows a consent page against confused-deputy attacks ([OAuth Proxy](https://gofastmcp.com/docs/servers/auth/oauth-proxy.md), [Google](https://gofastmcp.com/docs/integrations/google.md)).
-- **nexos.ai:** its custom MCP docs only mention per-user API keys, so add a **personal key mode**. A user signs in on the proxy's web page (same Google flow), gets a revocable personal key tied to their identity and stored upstream token, and pastes it into nexos. Ask nexos whether custom MCP supports OAuth first; if it does, skip this mode.
-- **No token passthrough.** The MCP spec forbids it: "The MCP server MUST NOT pass through the token it received from the MCP client" ([authorization security](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations.md)). FastMCP proxies forward incoming `Authorization` headers to HTTP backends **by default**. The build must set `forward_incoming_headers=False` ([FastMCP proxy](https://gofastmcp.com/docs/servers/providers/proxy.md)).
-
-### Auth flow: Claude to the Gmail proxy
-
-```mermaid
-sequenceDiagram
-  autonumber
-  actor U as User
-  participant C as Claude (claude.ai / Claude Code)
-  participant P as gmail-ro proxy (OAuth 2.1 AS)
-  participant G as Google OAuth
-  participant API as Gmail API
-
-  C->>P: MCP request, no token
-  P-->>C: 401 + protected resource metadata
-  C->>P: DCR / CIMD, authorize (PKCE)
-  P->>U: consent page
-  P->>G: redirect: scope = openid email gmail.readonly, access_type=offline
-  U->>G: Google sign-in and consent
-  G-->>P: code
-  P->>G: exchange code
-  G-->>P: access + refresh token (gmail.readonly only)
-  Note over P: check hd claim = Workspace domain<br/>store upstream token encrypted
-  P-->>C: proxy-issued token (not the Google token)
-  C->>P: tools/call with proxy token
-  Note over P: allowlist + pin re-check, audit line
-  P->>API: call with stored gmail.readonly token
-  API-->>P: result
-  P-->>C: result (size-capped)
-```
+- **Claude (web, Desktop, Claude Code):** the guard is an **OAuth 2.1 authorization server** for MCP clients (CIMD and DCR, PKCE, consent page) and **issues its own tokens**. Use Claude's recommended "Use Claude's published identity" (CIMD); by default the guard accepts only Claude's callbacks. Signing in is the Google sign-in for `openid email gmail.readonly`, offline so a refresh token comes back. Only verified accounts of our Workspace domain (`hd` claim) get through. Built on FastMCP's [OAuthProxy](https://gofastmcp.com/docs/servers/auth/oauth-proxy.md) and [GoogleProvider](https://gofastmcp.com/docs/integrations/google.md): Google tokens are stored Fernet-encrypted, never handed to the client.
+- **nexos.ai:** its custom MCP documents only per-user API keys, so the guard has a **personal key mode** (`MCP_GUARD_PERSONAL_KEYS=true`, next to OAuth). A user signs in with Google on the guard's `/keys` page and pastes the revocable key into nexos ([nexos-setup.md](nexos-setup.md)).
+- **No token passthrough**, as the [MCP spec](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations.md) requires. FastMCP forwards incoming headers by default, so the guard sets `forward_incoming_headers=False` ([FastMCP proxy](https://gofastmcp.com/docs/servers/providers/proxy.md)).
 
 ### Auth flow: nexos personal key mode
 
 ```mermaid
 sequenceDiagram
-  autonumber
   actor U as User
-  participant W as gmail-ro proxy web page
-  participant G as Google OAuth
-  participant N as nexos.ai custom MCP
-  participant P as gmail-ro proxy (MCP endpoint)
-
-  U->>W: open proxy sign-in page
-  W->>G: Google sign-in, scope = openid email gmail.readonly
-  G-->>W: tokens (gmail.readonly only)
-  W-->>U: revocable personal key tied to identity and stored upstream token
-  U->>N: paste personal key into nexos custom MCP
-  N->>P: tools/call with personal key
-  Note over P: resolve key to user, allowlist + pin re-check, audit
-  P-->>N: result
+  participant W as guard /keys page
+  participant N as nexos.ai
+  participant P as guard /mcp
+  U->>W: sign in with Google (gmail.readonly)
+  W-->>U: revocable personal key
+  U->>N: paste key into custom MCP
+  N->>P: tools/call with key
+  Note over P: key hash to person, refresh their Google token,<br/>same checks as OAuth, audit
 ```
 
 ## How the proxy authenticates upstream
 
 | Upstream | Recommended | Alternative | Avoid |
 |---|---|---|---|
-| Gmail (native) | Per-user OAuth with **only `gmail.readonly`**, through the org's Internal OAuth client, restricted by the Google admin to Specific Google data = `gmail.readonly` + sign-in scopes [GWA] | DWD service account limited to `gmail.readonly` [GWA super admin]: no per-user consent, but impersonates anyone | Any broader scope |
-| Payhawk MCP | Per-user OAuth: the proxy is an OAuth client to Payhawk's authorization server, and each user signs in with their Payhawk login, so Payhawk role scoping is kept. **Blocked today** by Payhawk's redirect-URI allowlist; needs **Payhawk Support to allow the proxy's redirect URI** | Payhawk Developer API with a **Read-only** API key and native read tools. This works today, but it is **one shared account-wide credential**: every user sees everything the key sees, losing per-user permissions. Not recommended for finance data | Passing the Claude-obtained Payhawk token through the proxy: forbidden by the MCP spec, and fragile because of token audience |
-| Payhawk, Claude-only | **No proxy:** add Payhawk directly as a Claude custom connector and Block its write tools in the org policy (enforced server-side) | | |
+| Gmail | Per-user OAuth with **only `gmail.readonly`** via our Internal client, which the Google admin limits to that scope [GWA] | Domain-wide delegation limited to `gmail.readonly`; can impersonate anyone | Any broader scope |
+| Payhawk MCP | Per-user OAuth with each person's Payhawk login, keeping Payhawk roles. **Blocked** until Payhawk Support allows the guard's redirect URI | A **Read-only** Developer API key: works today, but one account-wide key, so everyone sees everything | Token passthrough |
+| Payhawk, Claude only | **No proxy:** Payhawk as a Claude custom connector, write tools Blocked | | |
 
 ## Policy core (default deny)
 
-- **Per-upstream YAML config:**
+- **`guard.yaml`** has one entry per upstream; anything not listed is denied ([configuration.md](configuration.md)):
 
   ```yaml
-  upstream: payhawk
-  kind: mcp
-  url: https://mcp.payhawk.com/mcp
-  auth: { type: oauth, ... }
-  allow:
-    - name: list_expenses
-      schema_sha256: "..."
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
-    - name: get_expense
-      schema_sha256: "..."
-  # anything not listed is denied
+  upstreams:
+    gmail:
+      kind: gmail_api
+      url: https://gmail.googleapis.com
+      google_scopes: [https://www.googleapis.com/auth/gmail.readonly]
+      allow: [search_threads, get_thread, get_message, list_drafts, get_draft, list_labels]
   ```
 
-- **Listing:** `tools/list` returns only allowlisted tools whose pinned definition hash (name + input schema + description) still matches. If upstream changes a definition, the tool is dropped and an alert fires. This catches a read tool that quietly gains a write parameter.
-- **Calling:** `tools/call` re-checks the allowlist and the pin, independently of listing (defence in depth). Unknown or unlisted tools get an MCP error, and nothing is forwarded.
-- **Optional per-tool argument constraints** (JSON-schema subset or a CEL predicate), e.g. a maximum page size.
-- **Annotations:** on exposed tools, rewrite them to the values in config. Our server is the trusted party, so clients can rely on its hints.
-- **Other MCP features:**
-  - Deny `resources`, `prompts`, `sampling`, `completions` and subscriptions unless explicitly allowlisted.
-  - Pass elicitation through only for allowlisted tools.
-  - Drop upstream `ui://` MCP-App resources and widget actions (Payhawk `dispatch_widget_action`) unless allowlisted.
-- **Response handling:** a size cap. Optional prompt-injection screening, e.g. Google Model Armor (Google requires screening for its Workspace MCP servers).
-
-```mermaid
-flowchart TD
-  R["Incoming MCP request"] --> M{"method"}
-  M -- "tools/list" --> L["Return only allowlisted tools<br/>whose pinned hash still matches"]
-  L --> D1{"pin drift?"}
-  D1 -- yes --> A1["Drop tool + alert"]
-  M -- "tools/call" --> C1{"tool allowlisted<br/>and pin matches?"}
-  C1 -- no --> E["MCP error, nothing forwarded,<br/>audit deny"]
-  C1 -- yes --> C2{"argument constraints ok?"}
-  C2 -- no --> E
-  C2 -- yes --> F["Forward with stored least-privilege<br/>upstream token"] --> S["Size cap, optional screening,<br/>audit allow"]
-  M -- "resources / prompts / sampling /<br/>completions / subscriptions" --> E
-```
+- **Listing and calling:** other tools are missing from `tools/list` and refused on `tools/call` ("Unknown tool") without reaching the upstream.
+- **Pins (optional, `mcp` only):** a pinned tool whose definition hash (name, description, input schema) changes is dropped, with one warning. Our own Gmail API tools need no pins.
+- **Scope floor:** `google_scopes` must be `.readonly`, and each Google token must hold exactly those plus sign-in scopes. A broader token is revoked and refused.
+- **Annotations** never decide anything. **Resources and prompts** are never offered.
+- **Limits:** results capped at 1 MB (Gmail bodies at 20,000 characters); a per-person rate limit.
+- **Not built:** argument checks (every allowed tool is read-only whatever its arguments) and prompt-injection screening of results.
 
 ## Logging and audit
 
-- One structured JSON line per request with these fields:
-  - `ts`, `upstream`, `user` (sub and email), `client` (claude / nexos / code, from the client ID)
-  - `method`, `tool`, `decision` (allow / deny + reason), `args_sha256` (plus allowlisted non-sensitive fields)
-  - `upstream_status`, `latency_ms`, `result_bytes`
-- No message bodies by default.
-- Ship logs to Cloud Logging, then to a SIEM. Alert on any `deny` of a write-classed tool and on schema-pin drift.
-- Correlate with Google Workspace OAuth log events [GWA] and with the Claude Enterprise Compliance API if on Enterprise (not researched in depth).
+- One JSON line per tool call: `upstream`, `person`, `client` (`oauth`, `personal_key`, or `dev` in local test mode), `tool`, `decision`, `outcome`, `duration_ms` ([format](configuration.md#audit-log)).
+- No arguments, results or tokens are logged.
+- Ship to a SIEM; alert on `refused` (an agent trying a tool it doesn't have) and on pin drift. Correlate with Google OAuth log events [GWA].
 
-## Wiring the proxy into each client and stopping the unrestricted path
+## Wiring the proxy into each client
 
-| Step | Who |
-|---|---|
-| Create the GCP project in the org, Internal consent screen, Web OAuth client with the proxy callback (e.g. `https://gmail-ro.example.com/auth/callback`), scopes `openid email gmail.readonly` | GCP project owner in the Workspace org (Internal audience needs the org-owned project) |
-| Set the proxy's OAuth client in API controls to **Specific Google data** = `gmail.readonly` + sign-in scopes (or Trusted) | **[GWA]** |
-| Set Anthropic's **"Claude for Gmail"** (and nexos's Gmail app) to **Blocked** | **[GWA]** |
-| Optional: unconfigured third-party apps = "basic info only" or "don't allow"; Gmail service Restricted | **[GWA]**, with care: existing untrusted tokens are revoked |
-| Claude: Organization settings > Connectors > Add > Custom > Web, proxy URL, "Sign in when needed", OAuth client "Register automatically" (DCR) or "Use your own OAuth client". Set every exposed tool to Always allow (they are all read) | Claude Owner |
-| Claude: remove or don't enable the directory Gmail connector. Team: decline-and-block member requests for it. Enterprise: leave requests off and Block Gmail in every custom role | Claude Owner |
-| Claude Enterprise: turn on Restrict verified-domain connectors | Claude Owner (or Identity & Access Manage) |
-| Claude Code: server-managed settings (Team and Enterprise) **and** MDM `managed-settings.json` for API-key / nexos-gateway sessions | Claude Owner + IT |
-| Claude Desktop: `isLocalDevMcpEnabled=false`, block desktop extensions or use the allowlist, `forceLoginOrgUUID` | IT (MDM); Enterprise can use Organization settings |
-| nexos: Gmail integration **Inactive**; add the proxy as custom MCP (Streamable HTTP, personal-key auth) | nexos Owner |
-
-The per-role runbooks: [Google Workspace admin](runbooks/google-workspace-admin.md), [Claude org](runbooks/claude-org.md#route-b-read-only-proxy-or-google-gmail-mcp-as-custom-connector), [Claude Code managed settings](runbooks/claude-code-managed-settings.md), [nexos](runbooks/nexos.md).
+A GCP project owner creates the Internal OAuth client ([DEPLOY.md](../DEPLOY.md)); a Google admin limits it to `gmail.readonly` and blocks "Claude for Gmail" and nexos's Gmail app [GWA]; a Claude Owner adds the guard as a custom connector and keeps the built-in Gmail connector off; IT deploys Claude Code and Desktop managed settings; a nexos Owner sets Gmail Inactive and adds the guard. Runbooks: [Google Workspace admin](runbooks/google-workspace-admin.md), [Claude org](runbooks/claude-org.md), [Claude Code managed settings](runbooks/claude-code-managed-settings.md), [nexos](nexos-setup.md).
 
 ## Reuse an existing gateway or build?
 
 | Option | Fit | Verdict |
 |---|---|---|
-| **FastMCP v4 (Python)**, PrefectHQ/fastmcp: 28.3k stars, v4.1.6 released 2026-11-03 | Proxy provider for upstream MCP; `enable(..., only=True)` **allowlist mode** ("A disabled tool disappears from listings and cannot be called") ([visibility](https://gofastmcp.com/docs/servers/visibility.md)); middleware for call-time checks; OAuthProxy + GoogleProvider (spec-shaped token factory, consent, encrypted token store); Streamable HTTP | **Build on it** (thin layer: config, pins, audit, personal keys) |
-| **agentgateway** (Rust, Linux Foundation): 6k stars, v1.7 | `mcpAuthorization` CEL rules per tool (`mcp.tool.name`, `jwt.*`); unauthorized tools are filtered from lists; acts as a resource server against Keycloak / Auth0 / Okta / ... ([MCP authz](https://agentgateway.dev/docs/standalone/latest/configuration/security/mcp-authz/), [MCP authn](https://agentgateway.dev/docs/standalone/latest/configuration/security/mcp-authn/)) | Strong policy engine, but its documented backend auth is static or passthrough. No per-user upstream OAuth to Google or Payhawk was found. It would still need an auth component and a native Gmail server. Revisit if the team later wants one central gateway |
-| **IBM ContextForge** (Python): 4.8k stars | Virtual servers bundling selected tools, RBAC, upstream OAuth (per secondhand sources). Large surface; described by a competitor as alpha/beta without official support | Heavy for two read-only proxies; not verified first-hand |
-| **Cloudflare MCP server portals** (managed; docs updated 2026-11-05) | Portal behind Cloudflare Access; users sign in through your IdP. Per-tool on/off, and an **allowlist mode via API** (`default_disabled: true` + `updated_tools`); otherwise "new tools and prompts are automatically enabled". Per-user upstream OAuth with **your own OAuth client and an explicit Scope field** ("Require user auth"). Access request logs; optional Gateway HTTP logs and DLP. Claude Desktop/claude.ai setup documented (redirect `https://claude.ai/api/mcp/auth_callback`) ([MCP portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/)) | **Best "buy" candidate.** Limits: it only fronts MCP servers, so Gmail would sit behind Google's Developer Preview Gmail MCP; no documented pinning of tool definitions (an allowlisted name whose schema changes stays exposed); nexos would need Access OAuth or a shared service token; Payhawk still needs its redirect allowlist to include Cloudflare's callback; adds Cloudflare to the data path; Zero Trust plan cost not checked |
-| **Docker MCP Gateway** | `docker mcp gateway run --tools ...` filtering; geared to local / stdio use ([docs](https://docs.docker.com/reference/cli/docker/mcp/gateway/run/)) | Not a multi-user remote OAuth service |
-| Commercial (Composio, Arcade, MintMCP, Portkey, ...) | Hosted tool catalogs and gateways | Not verified here; puts a third party in the Gmail data path |
+| **FastMCP v4** (Python, 28.3k stars) | Upstream MCP proxy; allowlist mode ("A disabled tool disappears from listings and cannot be called", [visibility](https://gofastmcp.com/docs/servers/visibility.md)); middleware; OAuthProxy + GoogleProvider | **Built on it** (thin layer: config, pins, audit, personal keys) |
+| **agentgateway** (Rust) | Per-tool CEL rules ([MCP authz](https://agentgateway.dev/docs/standalone/latest/configuration/security/mcp-authz/)); no per-user upstream OAuth found | Would still need an auth component and a Gmail server |
+| **IBM ContextForge** (Python) | Virtual servers, RBAC, upstream OAuth (secondhand sources) | Heavy for two proxies; not verified first-hand |
+| **Cloudflare MCP server portals** (managed) | Behind Cloudflare Access. Allowlist mode via API (`default_disabled: true`), otherwise "new tools and prompts are automatically enabled". Per-user upstream OAuth with your own client and scopes ([MCP portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/)) | **Best "buy" option.** But Gmail would rely on the Developer Preview Gmail MCP; no pinning; nexos would need a shared token; Payhawk still needs its redirect allowlist; another vendor in the data path |
+| **Google Cloud IAM deny policy** on MCP tools | Denies `tools.call` where `mcp.googleapis.com/tool.isReadOnly == false` (org, folder or project), but "a list of all tools is returned, including read-write tools" ([prevent read-write tool use](https://docs.cloud.google.com/mcp/prevent-read-write-tool-use)). Workspace (Gmail) coverage not stated | Only for the `gmail-mcp` upstream, as a second layer: it trusts Google's read-only flags and doesn't hide write tools. Test when switching |
+| **Docker MCP Gateway** | Local tool filtering ([docs](https://docs.docker.com/reference/cli/docker/mcp/gateway/run/)) | Not multi-user |
+| Commercial (Composio, Arcade, Portkey, ...) | Hosted gateways | Not verified; a third party in the data path |
 
-![Turned-off tools are hidden and cannot be called; allowlist pattern](images/cloudflare-portal-allowlist.png)
+![Turned-off tools are hidden and cannot be called](images/cloudflare-portal-allowlist.png)
 
-*Source: [Cloudflare docs, MCP server portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/), captured 2026-11-08. Yellow highlight added.*
+*Source: [Cloudflare docs, MCP server portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/), 2026-11-08, highlight added.*
 
-**Build vs buy:** the research recommends building on FastMCP over a Cloudflare portal, for four reasons:
+**Why FastMCP over a Cloudflare portal:** the GA Gmail API, fail-closed pinning, personal keys for nexos, and no extra vendor in the data path. To run no code, a Cloudflare portal in front of Google's Gmail MCP with `default_disabled: true` and scope `gmail.readonly` is the credible alternative.
 
-- A native Gmail adapter on the GA Gmail API avoids depending on a Developer Preview server.
-- Schema pinning is fail-closed.
-- nexos can use personal keys.
-- No extra vendor sits in the email and finance data path.
-
-If the team would rather run no code, a Cloudflare portal in front of Google's Gmail MCP and Payhawk MCP, with `default_disabled: true` and upstream scope `gmail.readonly`, is the credible alternative. Spike it in M0 before committing.
-
-**Language and framework: Python 3.12+, FastMCP v4, uv, pydantic, google-api-python-client.**
-
-- FastMCP already has, as maintained code, the hardest parts to get right: the MCP OAuth authorization-server bridge with its token-factory model and Google provider; proxying to upstream MCP; allowlist-mode visibility; middleware.
-- Python has first-class Google API clients.
-- Alternative: TypeScript with the official MCP SDK. That works too, but the OAuth AS bridge would be hand-built.
-
-## Proposed repo layout
-
-The `docs/` tree below is what exists today. Everything else is **proposed** and not yet created.
-
-```
-mcp-readonly-proxies/
-  README.md                     # what this is, the read-only guarantee, quick start
-  docs/
-    findings.md                 # research findings
-    proxy-design.md             # this document
-    open-questions.md
-    runbooks/
-      google-workspace-admin.md # every [GWA] step, ready to hand to the Workspace admins
-      claude-org.md             # Owner steps: custom connector, tool policy, blocking built-in Gmail
-      claude-code-managed-settings.md # managed MCP allowlist/denylist, deny rules, hooks
-      nexos.md                  # custom MCP + personal keys, Gmail integration Inactive
-      payhawk.md                # redirect-URI request to Payhawk Support, tool classification
-  src/mcp_ro_proxy/             # proposed
-    app.py                      # build server from config (one upstream per process)
-    config.py                   # pydantic schema for upstream YAML
-    policy.py                   # default-deny allowlist, schema pin hashing, annotation rewrite
-    middleware.py               # call-time enforcement, size caps, audit emit
-    audit.py                    # structured JSON log lines
-    auth/
-      google.py                 # GoogleProvider/OAuthProxy, hd check, readonly scope set
-      personal_keys.py          # nexos-style per-user keys (milestone 5)
-    upstreams/
-      mcp_upstream.py           # ProxyClient with forward_incoming_headers=False, per-user upstream token
-      gmail_native.py           # search_threads, get_thread, get_message, list_labels, list_drafts
-  config/                       # proposed
-    gmail.yaml
-    payhawk.yaml                # allowlist from the Payhawk "Read" class, with pins captured at first run
-  tests/                        # proposed
-    test_policy.py              # unlisted tool hidden and rejected; pin drift drops tool
-    test_middleware.py          # call-time re-check even if list was bypassed
-    test_gmail_native.py        # scopes requested == {openid,email,gmail.readonly}
-    test_e2e_inmemory.py        # fake upstream exposing read+write tools; only read survive
-  deploy/                       # proposed
-    Dockerfile
-    cloudrun/                   # service config, Secret Manager bindings (Terraform optional)
-  examples/                     # proposed
-    claude-code-managed-settings.json
-  .github/workflows/ci.yml      # proposed: ruff, pyright, pytest
-```
-
-The original research layout also proposed `docs/architecture.md` (diagrams and auth flows, now in this document) and `docs/threat-model.md` (passthrough, confused deputy, schema drift, prompt injection, token theft), plus a `docs/runbooks/claude-desktop-policy.md` with plist/registry samples.
-
-## Milestones
-
-1. **M0, skeleton:** repo, `docs/findings.md` (done), CI with lint, types and tests.
-2. **M1, policy core:**
-   - Config schema, default-deny allowlist for list and call, schema pinning, annotation rewrite, audit lines.
-   - Tests against an in-memory fake upstream that exposes both read and write tools.
-3. **M2, Gmail native read-only server:**
-   - FastMCP GoogleProvider requesting exactly `openid email gmail.readonly` with offline access; `hd` check; encrypted token store.
-   - The five read tools.
-   - End-to-end test locally with Claude Code (`claude mcp add --transport http gmail-ro http://localhost:8000/mcp`). Prove that the granted token's scopes, via Google tokeninfo, are only readonly.
-4. **M3, deploy and pilot:**
-   - Cloud Run plus Secret Manager.
-   - [GWA] OAuth client configured as Specific Google data; "Claude for Gmail" Blocked for a pilot OU.
-   - Claude Owner adds the custom connector; test in claude.ai web, Desktop and Claude Code; confirm the built-in Gmail connector can't be connected.
-5. **M4, Payhawk:**
-   - Get Payhawk Support to allow the proxy redirect URI (start this request at M0; it is external lead time).
-   - Generic `mcp` upstream with per-user Payhawk OAuth; capture `tools/list` with annotations; pin the read allowlist.
-   - If Payhawk declines: decide between the read-only API key (shared credential) and Claude-only org Blocked policy with no Payhawk proxy.
-6. **M5, nexos and hardening:**
-   - Personal-key mode if nexos lacks OAuth for custom MCP.
-   - Rate limits, revoke endpoint and an admin view of connected users.
-   - Alerting on deny and drift; runbooks finished.
+**Stack:** Python 3.12+, FastMCP v4, uv, pydantic, httpx (no Google client library; the Gmail calls are a few GETs). FastMCP maintains the hardest parts: the OAuth bridge, proxying and allowlist visibility. TypeScript would need a hand-built OAuth bridge.

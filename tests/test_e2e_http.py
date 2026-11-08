@@ -1,338 +1,369 @@
-"""End to end over real HTTP: browser sign-in, personal key, MCP client over Streamable HTTP.
+"""End to end over Streamable HTTP: the guard and a fake Google (OAuth, Gmail API, Gmail MCP) on
+real ports, an MCP client signing in the way Claude Code does (dynamic registration, a localhost
+callback, the guard's consent page, Google), and nexos-style personal keys."""
 
-Two uvicorn servers run on localhost: the fake Google (OAuth + Gmail API) and the proxy
-built from config exactly as ``mcp-ro-proxy serve`` builds it.
-"""
-
-from __future__ import annotations
-
+import asyncio
 import json
+import logging
+import os
 import re
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlparse
 
 import httpx2
 import pytest
 from fastmcp import Client
+from fastmcp.client.auth import OAuth
 from fastmcp.client.transports import StreamableHttpTransport
-from starlette.types import ASGIApp, Receive, Scope, Send
+from fastmcp.exceptions import ToolError
+from mcp.shared.auth import AuthorizationCodeResult
 
-from mcp_ro_proxy.app import Proxy, build_proxy
-from mcp_ro_proxy.auth.google import GMAIL_READONLY, USERINFO_EMAIL
-from tests.conftest import REPO, free_port, make_config
-from tests.fakes.fake_google import FakeGoogle
-from tests.fakes.fake_upstream import UpstreamCalls, build_fake_upstream
+from mcp_guard.server import build_app
+from tests.conftest import Google, Serve, deployed_settings, free_port, upstream
+from tests.fakes.fake_google import GMAIL_READONLY, FakeUser
+
+
+class HeadlessOAuth(OAuth):
+    """FastMCP's OAuth client with a scripted browser instead of a real one: follows the
+    redirects, approves the guard's consent page, and stops at the client's own callback."""
+
+    def __init__(self, url: str) -> None:
+        super().__init__(url, client_name="Claude Code (test)")
+        self.browser = httpx2.AsyncClient(follow_redirects=False, timeout=30)
+        self._callback: str | None = None
+        self.pages: list[str] = []
+
+    async def redirect_handler(self, authorization_url: str) -> None:
+        url = authorization_url
+        for _ in range(10):
+            response = await self.browser.get(url)
+            if response.status_code == 200 and "consentForm" in response.text:
+                self.pages.append("consent")
+                fields = dict(
+                    re.findall(r'name="(txn_id|csrf_token)" value="([^"]+)"', response.text)
+                )
+                response = await self.browser.post(
+                    url, data={**fields, "submit": "true", "action": "approve"}
+                )
+            if response.status_code not in (302, 303, 307):
+                raise AssertionError(
+                    f"sign-in stopped at {url}: {response.status_code} {response.text[:300]}"
+                )
+            url = response.headers["location"]
+            if url.startswith(f"http://localhost:{self.redirect_port}/callback"):
+                self._callback = url
+                return
+        raise AssertionError("too many redirects")
+
+    async def callback_handler(self) -> AuthorizationCodeResult:
+        assert self._callback is not None
+        query = {k: v[0] for k, v in parse_qs(urlparse(self._callback).query).items()}
+        if "error" in query:
+            raise RuntimeError(f"sign-in failed: {query}")
+        return AuthorizationCodeResult(
+            code=query["code"], state=query.get("state"), iss=query.get("iss")
+        )
 
 
 @dataclass
-class Env:
-    fake: FakeGoogle
-    proxy: Proxy
-    base: str
-    browser: httpx2.AsyncClient
+class Deployment:
+    url: str
+    google: Google
+
+    @property
+    def mcp(self) -> str:
+        return f"{self.url}/mcp"
 
 
-def gmail_allow() -> list[dict[str, Any]]:
-    import yaml
-
-    raw = yaml.safe_load((REPO / "config" / "gmail.yaml").read_text())
-    return raw["allow"]
+def deploy(
+    serve: Serve,
+    google: Google,
+    name: str = "gmail",
+    upstream_url: str | None = None,
+    public_url: str | None = None,
+    **env: str,
+) -> Deployment:
+    port = free_port()
+    url = f"http://localhost:{port}"
+    up = upstream(name, url=upstream_url or google.url)
+    settings = deployed_settings(public_url or url, MCP_GUARD_UPSTREAM=name, **env)
+    serve(build_app(settings, up, endpoints=google.endpoints), port)
+    return Deployment(url, google)
 
 
 @pytest.fixture
-async def env(tmp_path: Path, serve: Any) -> AsyncIterator[Env]:
-    fake = FakeGoogle()
-    google = serve(fake.app())
-    port = free_port()
-    base = f"http://127.0.0.1:{port}"
-    config = make_config(
-        tmp_path,
-        base_url=base,
-        google_url=google.url,
-        upstream={
-            "kind": "native",
-            "name": "gmail",
-            "provider": "gmail",
-            "gmail": {"api_base_url": google.url},
-        },
-        allow=gmail_allow(),
-    )
-    proxy = build_proxy(config)
-    serve(proxy.app, port)
-    async with httpx2.AsyncClient(follow_redirects=False, timeout=10) as browser:
-        yield Env(fake=fake, proxy=proxy, base=base, browser=browser)
+def gmail(serve: Serve, google: Google) -> Deployment:
+    return deploy(serve, google, MCP_GUARD_PERSONAL_KEYS="true")
 
 
-async def sign_in(env: Env) -> httpx2.Response:
-    """Drive the browser flow: proxy -> Google -> proxy callback. Returns the final response."""
-    resp = await env.browser.get(f"{env.base}/auth/login")
-    assert resp.status_code == 302
-    resp = await env.browser.get(resp.headers["location"])  # fake Google consents
-    assert resp.status_code == 302
-    return await env.browser.get(resp.headers["location"])  # proxy callback
-
-
-def csrf_of(page: str) -> str:
-    match = re.search(r"name='csrf' value='([^']+)'", page)
-    assert match, page
-    return match.group(1)
-
-
-async def create_key(env: Env, label: str = "nexos") -> str:
-    page = (await env.browser.get(f"{env.base}/keys")).text
-    resp = await env.browser.post(f"{env.base}/keys", data={"csrf": csrf_of(page), "label": label})
-    assert resp.status_code == 200
-    match = re.search(r"id='new-key'>(mrp_[A-Za-z0-9_-]+)<", resp.text)
-    assert match, resp.text
-    return match.group(1)
-
-
-def mcp_client(env: Env, key: str | None = None, *, header: str | None = None) -> Client[Any]:
-    headers = {header: key} if header and key else None
-    auth = key if key and not header else None
-    return Client(StreamableHttpTransport(f"{env.base}/mcp", headers=headers, auth=auth))
-
-
-async def mcp_status(env: Env, key: str) -> int:
-    resp = await env.browser.post(
-        f"{env.base}/mcp",
-        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-        headers={"Authorization": f"Bearer {key}", "Accept": "application/json, text/event-stream"},
-    )
-    return resp.status_code
-
-
-def text(result: Any) -> str:
-    return result.content[0].text
-
-
-async def test_gmail_end_to_end(env: Env) -> None:
-    # Landing page and sign-in.
-    landing = await env.browser.get(f"{env.base}/")
-    assert "Sign in with Google" in landing.text
-    final = await sign_in(env)
-    assert final.status_code == 303
-    assert final.headers["location"] == "/keys"
-
-    # Google was asked for exactly openid, email and gmail.readonly, offline.
-    (authz,) = env.fake.authorize_requests
-    assert authz["scope"] == f"openid email {GMAIL_READONLY}"
-    assert authz["access_type"] == "offline"
-    assert authz["include_granted_scopes"] == "false"
-
-    key = await create_key(env)
-
-    async with mcp_client(env, key) as client:
-        tools = {t.name: t for t in await client.list_tools()}
-        assert set(tools) == {
-            "search_threads",
-            "get_thread",
-            "get_message",
-            "list_labels",
-            "list_drafts",
-        }
-        for tool in tools.values():
-            assert tool.annotations is not None
-            assert tool.annotations.read_only_hint is True
-            assert tool.annotations.destructive_hint is False
-
-        found = json.loads(text(await client.call_tool("search_threads", {"query": "invoice"})))
-        assert found["threads"][0]["subject"] == "Q3 invoice"
-        thread = json.loads(text(await client.call_tool("get_thread", {"thread_id": "t1"})))
-        assert thread["messages"][1]["body"]["text"] == "Thanks, received."
-
-        for write_tool in ("send_message", "create_draft", "trash_thread", "label_message"):
-            result = await client.call_tool_mcp(write_tool, {})
-            assert result.is_error
-            assert "Unknown tool" in text(result)
-
-    # Gmail only ever saw GETs carrying the user's Google token, never the personal key.
-    assert env.fake.write_attempts == []
-    assert env.fake.gmail_authorizations
-    assert all(a.startswith("Bearer ya29.fake-") for a in env.fake.gmail_authorizations)
-    assert not any(key in a for a in env.fake.gmail_authorizations)
-
-    # The X-API-Key header works too.
-    async with mcp_client(env, key, header="X-API-Key") as client:
-        assert len(await client.list_tools()) == 5
-
-
-async def test_mcp_requires_a_valid_key(env: Env) -> None:
-    resp = await env.browser.post(
-        f"{env.base}/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
-    )
-    assert resp.status_code == 401
-    resp = await env.browser.post(
-        f"{env.base}/mcp",
-        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-        headers={"Authorization": "Bearer mrp_not-a-real-key"},
-    )
-    assert resp.status_code == 401
-    with pytest.raises(Exception, match="error response"):
-        async with mcp_client(env, "mrp_forged") as client:
-            await client.list_tools()
-
-
-async def test_revoked_key_stops_working(env: Env) -> None:
-    await sign_in(env)
-    key = await create_key(env)
-    async with mcp_client(env, key) as client:
-        assert await client.list_tools()
-    assert await mcp_status(env, key) != 401
-    page = (await env.browser.get(f"{env.base}/keys")).text
-    key_id = re.search(r"action='/keys/([0-9a-f]+)/revoke'", page)
-    assert key_id
-    resp = await env.browser.post(
-        f"{env.base}/keys/{key_id.group(1)}/revoke", data={"csrf": csrf_of(page)}
-    )
-    assert resp.status_code == 303
-    assert "revoked" in (await env.browser.get(f"{env.base}/keys")).text
-    assert await mcp_status(env, key) == 401
-
-
-async def test_disconnect_revokes_google_grant_and_keys(env: Env) -> None:
-    await sign_in(env)
-    key = await create_key(env)
-    user = await env.proxy.store.get_user("1001")
-    assert user is not None
-    assert user.refresh_token
-    page = (await env.browser.get(f"{env.base}/keys")).text
-    resp = await env.browser.post(f"{env.base}/disconnect", data={"csrf": csrf_of(page)})
-    assert resp.status_code == 303
-    assert user.refresh_token in env.fake.revoked
-    assert await env.proxy.store.get_user("1001") is None
-    assert await mcp_status(env, key) == 401
-    landing = await env.browser.get(f"{env.base}/?disconnected=1")
-    assert "Disconnected" in landing.text
-
-
-async def test_sign_in_with_write_scope_is_refused(env: Env) -> None:
-    env.fake.grant_scopes = [
+async def test_claude_code_style_sign_in_and_calls(gmail: Deployment) -> None:
+    auth = HeadlessOAuth(gmail.mcp)
+    async with Client(StreamableHttpTransport(gmail.mcp, auth=auth)) as client:
+        tools = {t.name for t in await client.list_tools()}
+        labels = json.loads((await client.call_tool("list_labels", {})).content[0].text)  # type: ignore[union-attr]
+        with pytest.raises(ToolError, match="Unknown tool"):
+            await client.call_tool("send_email", {"to": "x@example.com"})
+    assert tools == {
+        "search_threads",
+        "get_thread",
+        "get_message",
+        "list_drafts",
+        "get_draft",
+        "list_labels",
+    }
+    assert {lb["name"] for lb in labels["labels"]} == {
+        "INBOX",
+        "SENT",
+        "UNREAD",
+        "DRAFT",
+        "Invoices",
+    }
+    assert auth.pages == ["consent"]
+    [google_request] = gmail.google.fake.authorize_requests
+    assert set(google_request["scope"].split()) == {
         "openid",
-        USERINFO_EMAIL,
+        "https://www.googleapis.com/auth/userinfo.email",
         GMAIL_READONLY,
-        "https://www.googleapis.com/auth/gmail.modify",
+    }
+    assert google_request["hd"] == "example.com"
+    assert google_request["access_type"] == "offline"
+    assert google_request["include_granted_scopes"] == "false"
+    assert gmail.google.fake.write_attempts == []
+
+
+async def test_sign_in_outlives_googles_access_token(gmail: Deployment) -> None:
+    """Google's access tokens last an hour; the client then refreshes through the guard, which
+    refreshes at Google, and the new token goes through the same checks."""
+    gmail.google.fake.access_lifetime_s = 2
+    async with Client(StreamableHttpTransport(gmail.mcp, auth=HeadlessOAuth(gmail.mcp))) as client:
+        await client.call_tool("list_labels", {})
+        await asyncio.sleep(3)
+        await client.call_tool("list_labels", {})
+    assert gmail.google.fake.token_grants == ["authorization_code", "refresh_token"]
+
+
+async def test_sign_in_with_too_much_access_fails_and_is_revoked(gmail: Deployment) -> None:
+    gmail.google.fake.grant_scopes = [
+        "openid",
+        "https://www.googleapis.com/auth/userinfo.email",
+        GMAIL_READONLY,
+        "https://mail.google.com/",
     ]
-    resp = await sign_in(env)
-    assert resp.status_code == 403
-    assert "write scopes" in resp.text
-    assert await env.proxy.store.get_user("1001") is None
-    assert env.fake.revoked
+    with pytest.raises(Exception):  # noqa: B017, PT011 - the client's own OAuth error
+        async with Client(
+            StreamableHttpTransport(gmail.mcp, auth=HeadlessOAuth(gmail.mcp))
+        ) as client:
+            await client.list_tools()
+    assert gmail.google.fake.revocations, "the broad Google grant should have been revoked"
+    assert gmail.google.fake.gmail_requests == []
 
 
-async def test_sign_in_from_another_domain_is_refused(env: Env) -> None:
-    env.fake.user.hd = "evil.test"
-    env.fake.user.email = "mallory@evil.test"
-    resp = await sign_in(env)
-    assert resp.status_code == 403
-    assert "Only example.com" in resp.text
-    assert await env.proxy.store.get_user("1001") is None
+async def test_person_outside_the_domain_gets_told(gmail: Deployment) -> None:
+    gmail.google.fake.user = FakeUser(
+        sub="2002", email="pat@example.com", hd=None
+    )  # consumer account
+    async with Client(StreamableHttpTransport(gmail.mcp, auth=HeadlessOAuth(gmail.mcp))) as client:
+        with pytest.raises(Exception, match=r"Only example\.com accounts"):
+            await client.list_tools()
+        with pytest.raises(ToolError, match=r"Only example\.com accounts"):
+            await client.call_tool("list_labels", {})
+    assert gmail.google.fake.gmail_requests == []
 
 
-async def test_callback_rejects_forged_state_and_csrf(env: Env) -> None:
-    resp = await env.browser.get(f"{env.base}/auth/login")
-    google = await env.browser.get(resp.headers["location"])
-    callback = urlsplit(google.headers["location"])
-    code = parse_qs(callback.query)["code"][0]
-    forged = await env.browser.get(f"{env.base}/auth/callback?code={code}&state=forged")
-    assert forged.status_code == 400
-    assert "state did not match" in forged.text
-
-    await sign_in(env)
-    resp = await env.browser.post(f"{env.base}/keys", data={"csrf": "wrong", "label": "x"})
-    assert resp.status_code == 403
-    assert await env.proxy.store.list_keys("1001") == []
-
-
-async def test_web_pages_send_security_headers(env: Env) -> None:
-    resp = await env.browser.get(f"{env.base}/")
-    assert resp.headers["cache-control"] == "no-store"
-    assert resp.headers["referrer-policy"] == "same-origin"
-    assert "frame-ancestors 'none'" in resp.headers["content-security-policy"]
-    assert (await env.browser.get(f"{env.base}/keys")).status_code == 303
-    assert (await env.browser.get(f"{env.base}/healthz")).text == "ok"
-    # Browser form posts carry the page's Origin; foreign or opaque origins are refused.
-    await sign_in(env)
-    page = (await env.browser.get(f"{env.base}/keys")).text
-    for origin, status in (("https://evil.test", 403), ("null", 403), (env.base, 200)):
-        resp = await env.browser.post(
-            f"{env.base}/keys",
-            data={"csrf": csrf_of(page), "label": "o"},
-            headers={"Origin": origin},
-        )
-        assert resp.status_code == status, origin
-    # Requests for another Host are refused (DNS-rebinding protection).
-    wrong_host = await env.browser.get(f"{env.base}/healthz", headers={"Host": "evil.test"})
-    assert wrong_host.status_code == 421
+async def test_proxied_gmail_mcp_gets_the_google_token_only(serve: Serve, google: Google) -> None:
+    # The fake Gmail MCP checks tokens against the same fake Google that signs people in.
+    gmail_mcp = serve(google.fake.gmail_mcp().http_app(path="/mcp/v1", stateless_http=True))
+    deployment = deploy(
+        serve,
+        google,
+        "gmail-mcp",
+        upstream_url=f"{gmail_mcp.url}/mcp/v1",
+        MCP_GUARD_PERSONAL_KEYS="true",
+    )
+    key = await create_key(deployment)
+    headers = {"X-API-Key": key, "Cookie": "session=agent-cookie"}
+    async with Client(StreamableHttpTransport(deployment.mcp, headers=headers)) as client:
+        assert len(await client.list_tools()) == 6
+        result = await client.call_tool("search_threads", {"id": "x"})
+        with pytest.raises(ToolError, match="Unknown tool"):
+            await client.call_tool("trash_thread", {"id": "x"})
+    assert result.data == "search_threads ok"
+    assert google.fake.mcp_calls == ["search_threads"]
+    sent = google.fake.mcp_headers[-1]
+    assert sent["authorization"].startswith("Bearer ya29.fake-")
+    assert "x-api-key" not in sent
+    assert "cookie" not in sent
 
 
-class RecordHeaders:
-    def __init__(self, app: ASGIApp, seen: list[dict[str, str]]) -> None:
-        self.app = app
-        self.seen = seen
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http":
-            self.seen.append({k.decode(): v.decode() for k, v in scope["headers"]})
-        await self.app(scope, receive, send)
+# --- personal keys (nexos.ai) ----------------------------------------------------------------
 
 
-async def test_mcp_upstream_over_http_never_receives_client_credentials(
-    tmp_path: Path, serve: Any
+async def keys_page(
+    deployment: Deployment, action: str, browser: httpx2.AsyncClient | None = None
+) -> httpx2.Response:
+    """Signs in on /keys with the fake Google and returns the final page."""
+    browser = browser or httpx2.AsyncClient(follow_redirects=True, timeout=30)
+    return await browser.get(f"{deployment.url}/keys/login?action={action}")
+
+
+async def create_key(deployment: Deployment) -> str:
+    page = await keys_page(deployment, "create")
+    assert page.status_code == 200, page.text
+    match = re.search(r'<code class="secret">(mcpg_[^<]+)</code>', page.text)
+    assert match, page.text
+    return match.group(1)
+
+
+async def mcp_status(deployment: Deployment, key: str) -> int:
+    """The HTTP status of an MCP request made with `key`."""
+    initialize = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "t", "version": "1"},
+        },
+    }
+    headers = {"X-API-Key": key, "Accept": "application/json, text/event-stream"}
+    async with httpx2.AsyncClient() as http:
+        return (await http.post(deployment.mcp, json=initialize, headers=headers)).status_code
+
+
+async def test_personal_key_reads_gmail(
+    gmail: Deployment, caplog: pytest.LogCaptureFixture
 ) -> None:
-    calls = UpstreamCalls()
-    upstream = build_fake_upstream(calls)
-    seen: list[dict[str, str]] = []
-    upstream_server = serve(RecordHeaders(upstream.http_app(path="/mcp"), seen))
-    upstream_cfg = {
-        "kind": "mcp",
-        "name": "payhawk",
-        "url": f"{upstream_server.url}/mcp",
-        "auth": {"type": "none"},
+    caplog.set_level(logging.INFO, logger="mcp_guard.audit")
+    key = await create_key(gmail)
+    for headers in ({"Authorization": f"Bearer {key}"}, {"X-API-Key": key}):
+        async with Client(StreamableHttpTransport(gmail.mcp, headers=headers)) as client:
+            result = await client.call_tool("search_threads", {"query": "invoice"})
+            with pytest.raises(ToolError, match="Unknown tool"):
+                await client.call_tool("trash_thread", {"thread_id": "t1"})
+        assert json.loads(result.content[0].text)["threads"][0]["id"] == "t1"  # type: ignore[union-attr]
+    [request] = [
+        r
+        for r in gmail.google.fake.authorize_requests
+        if r["redirect_uri"].endswith("/keys/callback")
+    ]
+    assert set(request["scope"].split()) == {
+        "openid",
+        "https://www.googleapis.com/auth/userinfo.email",
+        GMAIL_READONLY,
     }
-    from mcp_ro_proxy.config import McpUpstreamConfig
-    from mcp_ro_proxy.policy import tool_sha256
-    from mcp_ro_proxy.upstreams.mcp_upstream import McpUpstream
+    audit = [json.loads(r.getMessage()) for r in caplog.records if r.name == "mcp_guard.audit"]
+    assert audit[0]["client"] == "personal_key"
+    assert audit[0]["person"] == "pat@example.com"
+    assert gmail.google.fake.write_attempts == []
 
-    pins = {
-        t.name: tool_sha256(t)
-        for t in await McpUpstream(McpUpstreamConfig.model_validate(upstream_cfg)).list_tools(None)
+
+async def test_personal_key_outlives_googles_access_token(gmail: Deployment) -> None:
+    key = await create_key(gmail)
+    # Refreshed this long before it expires, so the guard's copy is good for 2 seconds.
+    gmail.google.fake.access_lifetime_s = 122
+    for _ in range(2):
+        assert await mcp_status(gmail, key) == 200
+    await asyncio.sleep(3)
+    assert await mcp_status(gmail, key) == 200
+    assert gmail.google.fake.token_grants == [
+        "authorization_code",
+        "refresh_token",
+        "refresh_token",
+    ]
+
+
+async def test_new_key_replaces_old_and_revoke_works(gmail: Deployment) -> None:
+    first = await create_key(gmail)
+    second = await create_key(gmail)
+    assert await mcp_status(gmail, second) == 200
+    assert await mcp_status(gmail, first) == 401
+    page = await keys_page(gmail, "revoke")
+    assert "is revoked" in page.text
+    # Revoking asks Google only who the person is, not for Gmail access.
+    assert (
+        gmail.google.fake.authorize_requests[-1]["scope"]
+        == "openid https://www.googleapis.com/auth/userinfo.email"
+    )
+    assert await mcp_status(gmail, second) == 401
+    assert await mcp_status(gmail, "mcpg_made-up") == 401
+
+
+async def test_key_page_refuses_outsiders_and_broad_grants(gmail: Deployment) -> None:
+    gmail.google.fake.user = FakeUser(sub="3003", email="mallory@other.example", hd="other.example")
+    page = await keys_page(gmail, "create")
+    assert page.status_code == 403
+    assert "Only example.com accounts" in page.text
+    assert "mcpg_" not in page.text
+    gmail.google.fake.user = FakeUser()
+    gmail.google.fake.grant_scopes = [
+        "openid",
+        "https://www.googleapis.com/auth/userinfo.email",
+        GMAIL_READONLY,
+        "https://www.googleapis.com/auth/gmail.send",
+    ]
+    page = await keys_page(gmail, "create")
+    assert page.status_code == 403
+    assert "mcpg_" not in page.text
+    assert len(gmail.google.fake.revocations) == 2  # both refused grants dropped at Google
+
+
+async def test_key_page_sign_in_is_tied_to_the_browser(gmail: Deployment) -> None:
+    async with httpx2.AsyncClient(follow_redirects=False) as attacker:
+        start = await attacker.get(f"{gmail.url}/keys/login?action=create")
+        google = await attacker.get(start.headers["location"])
+    # The victim's browser follows the attacker's callback link, without the attacker's cookie.
+    async with httpx2.AsyncClient(follow_redirects=False) as victim:
+        page = await victim.get(google.headers["location"])
+    assert page.status_code == 400
+    assert "mcpg_" not in page.text
+
+
+async def test_keys_are_stored_hashed_and_tokens_encrypted(
+    serve: Serve, google: Google, tmp_path: Any
+) -> None:
+    deployment = deploy(
+        serve, google, MCP_GUARD_PERSONAL_KEYS="true", MCP_GUARD_STORAGE_URL=f"file://{tmp_path}"
+    )
+    key = await create_key(deployment)
+    stored = "".join(p.read_text() for p in tmp_path.rglob("*") if p.is_file())
+    assert stored
+    assert key not in stored
+    refresh_tokens = [t for t, g in google.fake._refresh.items() if not g.revoked]  # pyright: ignore[reportPrivateUsage]
+    assert refresh_tokens
+    assert not any(token in stored for token in refresh_tokens)
+    assert "pat@example.com" not in stored
+
+
+async def test_personal_keys_off_by_default(serve: Serve, google: Google) -> None:
+    deployment = deploy(serve, google)
+    async with httpx2.AsyncClient() as http:
+        assert (await http.get(f"{deployment.url}/keys")).status_code == 404
+        assert (await http.get(f"{deployment.url}/health")).json() == {
+            "status": "ok",
+            "upstream": "gmail",
+        }
+
+
+@pytest.mark.skipif(not os.environ.get("GUARD_TEST_REDIS_URL"), reason="needs GUARD_TEST_REDIS_URL")
+async def test_sign_ins_work_on_every_replica(serve: Serve, google: Google) -> None:
+    """Two replicas behind one public URL, sharing Redis: a person signs in on one and is served by
+    the other, with an OAuth token and with a personal key."""
+    env = {
+        "MCP_GUARD_STORAGE_URL": os.environ["GUARD_TEST_REDIS_URL"],
+        "MCP_GUARD_STORAGE_ENCRYPTION_KEYS": "4j0xKqTt0bHq7oG1QeYyF6O8jx1oI5yX9Zl1p2nQf2w=",
+        "MCP_GUARD_PERSONAL_KEYS": "true",
     }
-    seen.clear()
-    port = free_port()
-    config = make_config(
-        tmp_path,
-        base_url=f"http://127.0.0.1:{port}",
-        upstream=upstream_cfg,
-        allow=[{"name": "list_expenses", "sha256": pins["list_expenses"]}],
-    )
-    proxy = build_proxy(config)
-    serve(proxy.app, port)
-    await proxy.store.save_user(
-        sub="1001",
-        email="pat@example.com",
-        hd="example.com",
-        refresh_token=None,
-        scopes=frozenset({"openid"}),
-    )
-    _, key = await proxy.store.create_api_key(sub="1001", label="t", ttl_seconds=None, max_active=5)
-
-    transport = StreamableHttpTransport(
-        f"http://127.0.0.1:{port}/mcp", auth=key, headers={"X-API-Key": key, "Cookie": "c=1"}
-    )
-    async with Client(transport) as client:
-        assert [t.name for t in await client.list_tools()] == ["list_expenses"]
-        await client.call_tool("list_expenses", {"limit": 1})
-        denied = await client.call_tool_mcp("create_expense", {"amount": 5})
-        assert denied.is_error
-
-    assert calls.calls == [("list_expenses", {"limit": 1})]
-    assert seen, "the upstream was never contacted"
-    for headers in seen:
-        assert "authorization" not in headers
-        assert key not in json.dumps(headers)
-        assert "x-api-key" not in headers
-        assert "cookie" not in headers
+    first = deploy(serve, google, **env)
+    second = deploy(serve, google, public_url=first.url, **env)
+    auth = HeadlessOAuth(first.mcp)
+    async with Client(StreamableHttpTransport(first.mcp, auth=auth)) as client:
+        await client.list_tools()
+    tokens = await auth.token_storage_adapter.get_tokens()  # pyright: ignore[reportOptionalMemberAccess]
+    assert tokens is not None
+    headers = {"Authorization": f"Bearer {tokens.access_token}"}
+    async with Client(StreamableHttpTransport(second.mcp, headers=headers)) as client:
+        assert len(await client.list_tools()) == 6
+    key = await create_key(first)
+    assert await mcp_status(second, key) == 200

@@ -1,75 +1,73 @@
-# Security model of the proxy
+# Security model of the guard
 
-What the proxy guarantees, how, and what it does not cover. The research behind the
-design (Claude and nexos.ai controls, Gmail scopes, Workspace controls) is in the
-findings docs.
+What the guard guarantees and what it doesn't. Research behind it: [findings.md](findings.md).
 
 ## Layers that keep Gmail read-only
 
 | Layer | Enforced by | Holds even if... |
 |---|---|---|
-| 1. The Google token holds only `gmail.readonly` | Google | the proxy has a bug, or a client calls Gmail some other way with that token |
-| 2. Only allowlisted, pinned tools are listed | Proxy (`PolicyProvider`) | the upstream adds or changes tools |
-| 3. Every call is re-checked: allowlist, current pin, arguments against the pinned schema | Proxy (`PolicyMiddleware`) | a client skips `tools/list` or guesses names |
-| 4. Gmail adapter issues only GET requests, with validated IDs | Proxy (`GmailApi`) | an argument tries to reach another endpoint |
-| 5. OAuth client restricted to `gmail.readonly` at Workspace level | Google, configured by [GWA] | someone changes the proxy's requested scopes |
+| 1. The Google token holds only `gmail.readonly` (plus sign-in) | Google | the guard has a bug |
+| 2. A token holding more is refused, and revoked if the guard obtained it | Guard, every request | Google grants more than asked |
+| 3. Only allowlisted tools are listed or callable | Guard | the upstream adds tools, or a client calls a hidden name |
+| 4. A pinned tool whose definition changed is dropped | Guard, `mcp` upstreams | a read tool quietly gains a write parameter |
+| 5. Gmail API tools only send GETs, with checked ids | Guard, `gmail_api` | an argument tries to reach another endpoint |
+| 6. `guard.yaml` accepts only `.readonly` scopes | Guard, at startup | someone edits the config to ask for more |
+| 7. The OAuth client is limited to `gmail.readonly` in Workspace | Google, set by a Workspace admin | someone changes the guard's code |
 
-Layer 1 is the real guarantee: Google rejects any send, draft, label or delete made with
-the token, whatever the client does. The proxy requests exactly
-`openid email gmail.readonly` with `include_granted_scopes=false`, then verifies the
-granted set in the token response, again through Google's tokeninfo endpoint, and again
-on every refresh. Any extra scope, write or not, makes it refuse the grant and revoke it
-at Google, so a broader token is never stored.
+Layer 1 is the real guarantee: Google rejects any write made with the token. The sign-in asks for
+exactly `openid`, `userinfo.email` and `gmail.readonly`, and Google's tokeninfo confirms each token
+was issued to the guard's OAuth client with those scopes and no more. A token pasted in `--dev` is
+refused the same way but not revoked, since it's the person's own.
+
+## Who gets in
+
+- **Only company Workspace accounts.** The Internal consent screen blocks others at Google, and the
+  guard requires a verified email in the allowed domain with a matching Workspace domain (`hd`).
+  Without `hd`, a personal Google account made for `pat@example.com` would get in, and the
+  company can't suspend or offboard it.
+- **Only Claude signs in with OAuth.** Clients may register only the callbacks in
+  `MCP_GUARD_CLIENT_REDIRECT_URIS` (Claude.ai, Claude Desktop and Claude Code by default), so no
+  other app can collect Gmail access through the guard.
+- **Personal keys** (nexos.ai) need a fresh Google sign-in on `/keys` with the same checks. One key
+  per person.
 
 ## Threats and mitigations
 
 | Threat | Mitigation |
 |---|---|
-| Token passthrough (forwarding the MCP client's credential upstream, forbidden by the MCP spec) | The proxy never forwards inbound headers. The `mcp` upstream builds its own transport with only configured credentials and refuses to run if the client ever defaults to forwarding (`forward_incoming_headers`). A test proves an HTTP upstream sees neither `Authorization`, `X-API-Key` nor cookies from the client |
-| Upstream schema drift (a read tool gains a write parameter) | Definition pins over name, description and input schema; drift hides the tool, blocks calls and logs `tool_hidden` |
-| Untrusted upstream annotations (`readOnlyHint` lies) | Annotations are rewritten from config; config rejects `readOnlyHint: false` / `destructiveHint: true`; upstream hints are ignored for decisions |
-| Resources, prompts, sampling, elicitation, roots from the upstream | Never relayed: the proxy only registers tools, its upstream client has no sampling/elicitation/roots handlers, and resource/prompt requests are denied |
-| Stolen personal key | Keys are random 256-bit values, stored as sha256 hashes, expire (default 180 days), are revocable per key or all at once, and give access only to the owner's mailbox, read-only. `last_used_at` is shown on the keys page |
-| Stolen database | Refresh tokens are AES-256-GCM encrypted with keys from Secret Manager, bound to the user's `sub`; keys are hashes only |
-| Accounts from outside the organization | ID token verified against Google's JWKS (issuer, audience, expiry, nonce); `hd` must equal the Workspace domain; email must be verified. The Internal consent screen blocks outside accounts at Google too |
-| Login CSRF and code injection | PKCE (S256), `state` and `nonce` bound to the browser session, 10-minute login window |
-| CSRF on key management | Per-session CSRF tokens, `SameSite=Lax` signed session cookie, `Origin` checked against the public origin |
-| DNS rebinding | Requests with a `Host` other than the public host get `421` |
-| Clickjacking, script injection on the web pages | `frame-ancestors 'none'`, nonce-based CSP, all output HTML-escaped |
-| Oversized responses | Per-call size cap (default 1 MiB, per tool configurable); Gmail bodies truncated (default 20,000 characters) |
-| Leaking mail into logs | Audit lines carry an argument hash, never arguments, results or tokens; errors the proxy itself returns to clients are fixed strings |
+| Forwarding the client's credential upstream | Upstream calls carry only the person's Google token, no incoming headers. Tested |
+| Google tokens sent to a third party | Every upstream must be `*.googleapis.com` (or a local address, for tests) |
+| Upstream tool changes | Optional [pins](configuration.md#pins); a changed tool is dropped and its new hash logged |
+| Lying `readOnlyHint` annotations | Only the allowlist decides, so a lying annotation can't add a tool |
+| Upstream resources and prompts | Never offered |
+| Stolen personal key | 256-bit, stored hashed, expires in 180 days, revocable, reads only its owner's mail |
+| Stolen storage | Everything is Fernet-encrypted; personal keys and the guard's refresh tokens are stored only as hashes |
+| Login CSRF on `/keys` | PKCE, plus a 10-minute `state` tied to the browser by an HttpOnly cookie |
+| DNS rebinding on a local `--dev` guard | Host and Origin checked on localhost (421 otherwise) |
+| One agent using up the shared Gmail quota | Per-person rate limit (2/s, bursts of 20) |
+| Oversized responses | Results cut at 1 MB, bodies at 20,000 characters |
+| Mail leaking into logs | The [audit line](configuration.md#audit-log) never holds arguments, results or tokens |
 
-## Not covered (yet)
+## Not covered
 
-- **Prompt injection in mail content.** Email bodies are untrusted input to the model.
-  The proxy cannot send mail, so injected instructions cannot exfiltrate through Gmail
-  itself, but they can still steer the model's other tools in the same chat. Google
-  requires prompt-injection screening for its own Workspace MCP servers; adding a
-  screening step (for example Model Armor) on responses is a possible follow-up.
-- **Rate limiting** per user or key is not implemented; Cloud Run max instances and
-  Gmail API quotas are the current limits.
-- **Claude web, desktop and mobile** need an MCP OAuth authorization-server mode, not
-  built yet. On Claude, rely on Anthropic's server-side **Blocked** policy for the
-  built-in Gmail connector meanwhile; that is enforced by Anthropic but the built-in
-  connector's token can still send, so the Google-side controls [GWA] matter.
-- **Payhawk** (an `mcp` upstream with per-user OAuth) is not wired: Payhawk accepts
-  OAuth sign-ins only from allowlisted apps, and per-user upstream OAuth is not built yet.
-  The proxy sends `mcp` upstreams no credential; a shared upstream credential is an open
-  stakeholder decision ([open questions](open-questions.md)).
+- **Prompt injection in mail.** Mail is untrusted input. It can't make the guard send anything, but
+  it can steer the model's other tools in the same chat. Screening responses (like Google's Model
+  Armor) is a possible follow-up.
+- **Argument checks.** The allowlist is by name only; enough while every allowed tool is read-only.
+- **Payhawk.** Not wired; it needs its own per-person sign-in ([payhawk.md](runbooks/payhawk.md)).
+- **Revoking a key doesn't revoke at Google.** It deletes the stored Google token; revoking the grant
+  would also sign the person out of Claude. To cut everything off, remove the app at Google.
 
-## Verified locally vs. needs real accounts
+## What has been verified
 
-Verified end to end on localhost, with the fake Google and with Claude Code and the
-FastMCP client as MCP clients: Google sign-in flow (PKCE, ID token verification, `hd`
-check, scope checks and revocation of over-broad grants), personal keys (create, use as
-bearer or `X-API-Key`, revoke, disconnect), tool listing with rewritten annotations,
-Gmail reads, unknown/write tools rejected without reaching Gmail, pin drift, size cap,
-no header forwarding to an HTTP upstream, the container image, and the store on SQLite
-and PostgreSQL.
+| Where | Verified |
+|---|---|
+| Locally, fake Google | Claude Code's real sign-in and the six tools; over-broad grants refused; domain and `hd` checks; personal keys end to end; Redis across replicas; no header forwarding; audit, pins, size cap, rate limit; the container image |
+| Real Google, `--dev`, personal account | The token check against real tokeninfo and userinfo; real labels and threads read; write tools refused before Gmail |
 
-Needs a real Google OAuth client and Workspace tenant to verify: that Google's real
-token, tokeninfo and refresh responses report scopes as the fake does; the consent screen
-an Internal app shows; behaviour when a Workspace admin sets the client to "Specific
-Google data"; real Gmail API responses for unusual messages (nested multiparts,
-non-UTF-8 bodies, very large threads). Needs nexos.ai access: the header nexos sends the
-key in and its "Test connection" behaviour.
+Still needs real accounts:
+
+- **Google OAuth client and Workspace:** refresh and revocation, `hd`, the Internal consent screen,
+  "Specific Google data", unusual messages.
+- **Claude.ai:** the custom connector's sign-in.
+- **nexos.ai:** the header it sends the key in, and its "Test connection" ([nexos-setup.md](nexos-setup.md)).

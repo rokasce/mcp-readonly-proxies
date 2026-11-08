@@ -12,17 +12,15 @@ jobs:
   check:
     runs-on: ubuntu-latest
     services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: mrp
-        ports: ["5432:5432"]
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
         options: >-
-          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s
+          --health-cmd "redis-cli ping" --health-interval 2s --health-timeout 5s
           --health-retries 20
     env:
-      MCP_RO_TEST_POSTGRES_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/mrp
+      # Runs the storage and two-replica sign-in tests against a real Redis.
+      GUARD_TEST_REDIS_URL: redis://127.0.0.1:6379/0
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -30,7 +28,7 @@ jobs:
           version: "0.13.1"
           enable-cache: true
       - name: Install
-        run: uv sync --frozen --extra postgres
+        run: uv sync --frozen
       - name: Lint
         run: uv run ruff check .
       - name: Format
@@ -44,8 +42,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build -f deploy/Dockerfile -t mcp-ro-proxy:ci .
+      - name: Build image (runs the tests in its test stage)
+        run: docker build -t mcp-guard:ci .
       - name: Smoke test
         run: |
-          docker run --rm mcp-ro-proxy:ci mcp-ro-proxy pins --config /app/config/gmail.yaml
+          docker run -d --name guard -p 3000:3000 \
+            -e MCP_GUARD_UPSTREAM=gmail \
+            -e MCP_GUARD_BASE_URL=http://localhost:3000 \
+            -e MCP_GUARD_GOOGLE_CLIENT_ID=ci.apps.googleusercontent.com \
+            -e MCP_GUARD_GOOGLE_CLIENT_SECRET=ci-secret \
+            -e MCP_GUARD_ALLOWED_DOMAIN=example.com \
+            mcp-guard:ci
+          for i in $(seq 1 30); do curl -fs localhost:3000/health && break; sleep 1; done
+          curl -fs localhost:3000/health | grep '"upstream":"gmail"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:3000/mcp)" = 401
+          docker logs guard
