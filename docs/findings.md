@@ -407,7 +407,7 @@ The full 82-tool read / write / ambiguous classification is in [runbooks/payhawk
 
 ## 7. The custom read-only proxy route
 
-The design for a generic default-deny allowlisting proxy (one codebase, one deployment per upstream; Gmail native adapter and Payhawk MCP upstream) is in [proxy-design.md](proxy-design.md). It is a **proposal pending decisions**; nothing is built yet.
+The design for a generic default-deny allowlisting proxy (one codebase, one deployment per upstream; Gmail native adapter and Payhawk MCP upstream) is in [proxy-design.md](proxy-design.md). The first proxy (Gmail native upstream, personal-key auth for nexos.ai) is now built in this repo (see [configuration.md](configuration.md)); Claude OAuth connector mode, Payhawk wiring and any real deployment are still open.
 
 ---
 

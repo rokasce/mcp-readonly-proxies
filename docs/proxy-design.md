@@ -1,6 +1,6 @@
 # Proxy design (proposal)
 
-> **Status: proposal pending decisions.** Nothing here is built. Whether to build a proxy at all, which Gmail upstream to use, and how to handle Payhawk are open (see [open-questions.md](open-questions.md)). Sources checked on 2026-11-08; evidence labels as in [findings.md](findings.md#scope).
+> **Status: proposal, partly built.** The Gmail native upstream with personal-key auth for nexos.ai is built in this repo ([configuration.md](configuration.md), [security-model.md](security-model.md)). Claude OAuth connector mode, Payhawk wiring and any real deployment are still open (see [open-questions.md](open-questions.md)). Sources checked on 2026-11-08; evidence labels as in [findings.md](findings.md#scope).
 
 ## One generic proxy, one deployment per upstream
 
