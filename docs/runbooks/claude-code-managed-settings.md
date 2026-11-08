@@ -37,7 +37,7 @@ File locations for `managed-settings.json` ([managed-settings.md](https://code.c
 | Permission deny rules | `"deny": ["mcp__claude_ai_Gmail__send_message", ...]` or `"mcp__claude_ai_Gmail__*"`. A deny rule from any level wins; managed rules can't be overridden, not even by `--allowedTools` | `allowManagedPermissionRulesOnly` makes managed settings the only source of rules. `mcp__` rules with parentheses are skipped in settings files ([permissions.md](https://code.claude.com/docs/en/permissions.md)) |
 | MCP allowlist / denylist | `allowManagedMcpServersOnly: true` + `allowedMcpServers` (only these load); `deniedMcpServers` | `serverName` is "not a security control"; prefer `serverUrl`. The denylist always wins ([managed-mcp.md](https://code.claude.com/docs/en/managed-mcp.md)) |
 | Exclusive set | `managed-mcp.json` loads only listed servers and suppresses claude.ai connectors unless `allowAllClaudeAiMcps: true` | File only (MDM); can't be delivered server-side |
-| Provide a server to all | `managedMcpServers: { "gmail-ro": { "type": "http", "url": "..." } }` | v2.1.259+; skips the allowlist check |
+| Provide a server to all | `managedMcpServers: { "gmail-guard": { "type": "http", "url": "..." } }` | v2.1.259+; skips the allowlist check |
 | Pin OAuth scopes for user-added servers | `"oauth": { "scopes": "https://www.googleapis.com/auth/gmail.readonly" }` | Overrides scopes the server advertises ([mcp.md](https://code.claude.com/docs/en/mcp.md#restrict-oauth-scopes)) |
 | Hooks | A `PreToolUse` hook can deny any call; deny rules hold even if a hook says allow; `allowManagedHooksOnly` restricts hooks to managed ones | [permissions.md](https://code.claude.com/docs/en/permissions.md#extend-permissions-with-hooks) |
 | Disable claude.ai connectors | `disableClaudeAiConnectors: true` (any source set to true wins) | Fetched connectors only |
@@ -58,7 +58,7 @@ Only the read-only proxies load; the built-in Gmail connector, Google's Gmail MC
 {
   "allowManagedMcpServersOnly": true,
   "allowedMcpServers": [
-    { "serverUrl": "https://gmail-ro.example.com/*" },
+    { "serverUrl": "https://gmail-guard.example.com/*" },
     { "serverUrl": "https://payhawk-ro.example.com/*" }
   ],
   "deniedMcpServers": [
@@ -113,9 +113,9 @@ Tools from connectors Claude Code fetches itself appear as `mcp__claude_ai_<serv
 ```json
 {
   "managedMcpServers": {
-    "gmail-ro": {
+    "gmail-guard": {
       "type": "http",
-      "url": "https://gmail-ro.example.com/mcp"
+      "url": "https://gmail-guard.example.com/mcp"
     }
   }
 }
@@ -128,9 +128,9 @@ For a user-added OAuth server, `oauth.scopes` pins the requested scopes (single 
 ```json
 {
   "mcpServers": {
-    "gmail-ro": {
+    "gmail-guard": {
       "type": "http",
-      "url": "https://gmail-ro.example.com/mcp",
+      "url": "https://gmail-guard.example.com/mcp",
       "oauth": {
         "scopes": "https://www.googleapis.com/auth/gmail.readonly"
       }

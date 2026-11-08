@@ -29,7 +29,7 @@ MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"
 DOCS = [
     ("readme", "README.md", "Overview", "main"),
     ("findings", "docs/findings.md", "Findings", "main"),
-    ("proxy-design", "docs/proxy-design.md", "Proxy design (proposal)", "main"),
+    ("proxy-design", "docs/proxy-design.md", "Proxy design", "main"),
     (
         "rb-google-workspace-admin",
         "docs/runbooks/google-workspace-admin.md",
@@ -47,7 +47,7 @@ DOCS = [
     ("rb-payhawk", "docs/runbooks/payhawk.md", "Payhawk", "runbook"),
     ("local-development", "docs/local-development.md", "Local development", "runbook"),
     ("configuration", "docs/configuration.md", "Configuration", "runbook"),
-    ("deploy", "docs/deploy.md", "Deploy to Cloud Run", "runbook"),
+    ("deploy", "DEPLOY.md", "Deploy", "runbook"),
     ("nexos-setup", "docs/nexos-setup.md", "nexos.ai setup", "runbook"),
     ("security-model", "docs/security-model.md", "Security model", "runbook"),
     ("open-questions", "docs/open-questions.md", "Open questions", "main"),

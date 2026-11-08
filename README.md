@@ -1,12 +1,139 @@
-# mcp-readonly-proxies
+# MCP Guard
 
-Read-only access control for MCP connectors (Gmail, Payhawk) in Claude and nexos.ai: research findings, admin runbooks and, later, allowlisting MCP proxies.
+A proxy in front of Gmail (and other MCP servers that sign people in with Google). Agents connect
+to the guard instead of the upstream, and see and call only the read-only tools allowed in
+`guard.yaml`. Every other tool, including any the upstream adds later, is left out of `tools/list`
+and refused on `tools/call` without reaching the upstream. It works for Claude (Team and
+Enterprise: claude.ai, Desktop, mobile, Claude Code) and for nexos.ai.
 
-> **Status:** the first proxy is now **built** in this repo: a Gmail native upstream with personal-key auth for nexos.ai (see [Read-only proxy](#read-only-proxy)). Claude OAuth connector mode, Payhawk wiring and any real deployment are still open (see [docs/open-questions.md](docs/open-questions.md)). The broader design in [docs/proxy-design.md](docs/proxy-design.md) remains a proposal.
+This repo also holds the research behind it: how to restrict MCP tools in Claude and nexos.ai,
+with admin runbooks ([Background](#background-restricting-mcp-tools-in-claude-and-nexosai)).
 
-All sources were checked on **2026-11-08**.
+## Gmail
 
-## Bottom line
+| Allowed (read-only) | Blocked (everything else) |
+|---|---|
+| `search_threads`, `get_thread`, `get_message`, `list_drafts`, `get_draft`, `list_labels` | e.g. sending, `create_draft`, `create_label`, label/unlabel, trash/untrash, spam and sensitive-label tools |
+
+Each person signs in with Google through the guard (it is an OAuth proxy to Google). The guard
+calls Gmail with that person's own token, refreshing it as needed, so each person reaches only
+their own mailbox. Sign-in asks only for `gmail.readonly`, and a Google token holding anything more
+(`gmail.modify`, `https://mail.google.com/`, ...) is refused and revoked at Google, so Google
+itself refuses changes even if a tool were allowed by mistake. Only verified accounts of the
+company's Google Workspace domain get through.
+
+To use it in Claude: add the guard's URL once (`claude mcp add --transport http gmail
+https://<guard>/mcp`, or as a custom connector in Claude.ai), then sign in with Google when asked.
+For nexos.ai, whose custom MCP takes a per-person API key, each person makes a **personal key** on
+the guard's `/keys` page ([docs/nexos-setup.md](docs/nexos-setup.md)).
+
+After every tool call the guard writes one JSON line: who, which tool, whether it was allowed, how
+it ended and how long it took. Arguments (search queries, ids) and mail are never logged.
+
+## Gmail API or Gmail MCP
+
+The guard can reach Gmail two ways, both behind the same allowlist, domain check, audit and limits:
+
+| `kind` in `guard.yaml` | Upstream | Status |
+|---|---|---|
+| `gmail_api` (**default**, upstream `gmail`) | The GA [Gmail REST API](https://developers.google.com/workspace/gmail/api/reference/rest), through the guard's own six read-only tools | Generally available |
+| `mcp` (upstream `gmail-mcp`) | Google's [Gmail MCP server](https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server) (`https://gmailmcp.googleapis.com/mcp/v1`), filtered to the tools it marks read-only | Developer Preview |
+
+Use the Gmail API for now. Google's Gmail MCP is in Developer Preview: it needs enrolment in the
+preview program, runs under preview terms, and Google asks for prompt-injection screening (e.g.
+Model Armor) in front of its Workspace MCP servers. The Gmail API has none of that. Both use the
+same `gmail.readonly` token, so the read-only floor is the same, and the guard's tools have the same
+names as Gmail MCP's read-only ones, so agents see no difference.
+
+To switch once Gmail MCP is generally available, set `MCP_GUARD_UPSTREAM=gmail-mcp` (the entry is
+already in `guard.yaml`); nothing else changes, not even the OAuth client. Optionally pin its tool
+definitions (`pins`, [docs/configuration.md](docs/configuration.md#pins)) so a changed tool is
+dropped until reviewed.
+
+## Settings
+
+| Variable | |
+|---|---|
+| `MCP_GUARD_UPSTREAM` | Which upstream in `guard.yaml` this process fronts: `gmail` (Gmail API) or `gmail-mcp` |
+| `MCP_GUARD_BASE_URL` | The guard's public https URL; Google redirects back to it after sign-in |
+| `MCP_GUARD_GOOGLE_CLIENT_ID`, `MCP_GUARD_GOOGLE_CLIENT_SECRET` | A Google OAuth client (Web application, **Internal** to the Workspace) with redirect URIs `<base url>/auth/callback` and, with personal keys, `<base url>/keys/callback` |
+| `MCP_GUARD_ALLOWED_DOMAIN` | e.g. `example.com`: only verified accounts of that Google Workspace domain get through. Google's `hd` claim must equal it, so a personal Google account for a company address is refused too |
+| `MCP_GUARD_JWT_SIGNING_KEY` (optional) | Signs the guard's own tokens. Left out, it's derived from the client secret, so rotating that secret signs everyone out |
+| `MCP_GUARD_CLIENT_REDIRECT_URIS` (optional) | Comma-separated callback patterns MCP clients may register. Default, Claude only: `https://claude.ai/api/mcp/auth_callback`, `https://claude.com/api/mcp/auth_callback`, `http://localhost:*/callback`, `http://127.0.0.1:*/callback`. Setting it replaces the default |
+| `MCP_GUARD_PERSONAL_KEYS` (optional) | `true` serves the personal-key page (`/keys`) and accepts those keys on `/mcp`, next to the OAuth sign-in. Default `false` |
+| `MCP_GUARD_STORAGE_URL` (optional) | Where sign-ins and personal keys are kept: `redis://...` / `rediss://...` (needed for more than one replica), `file:///path`, or `memory://` (lost on restart). Left out: files under `FASTMCP_HOME` |
+| `MCP_GUARD_STORAGE_ENCRYPTION_KEYS` (optional) | Comma-separated Fernet keys that encrypt everything stored; the first encrypts, all decrypt, so rotation is: add the new key first, drop the old one later. Left out, one key is derived from the JWT signing key |
+| `MCP_GUARD_CONFIG` (optional) | Path to the config, default `guard.yaml` |
+| `MCP_GUARD_HOST`, `MCP_GUARD_PORT` (optional) | Where it listens; default `0.0.0.0:3000` (`127.0.0.1` with `--dev`) |
+| `FASTMCP_HOME` (optional) | Where sign-in state goes when `MCP_GUARD_STORAGE_URL` isn't set. Must be writable and survive restarts, or everyone signs in again |
+
+Sign-in shows the guard's own approval page ("Claude Code wants to access gmail-guard") the first
+time a client signs in from a browser, then remembers it; cross-site navigations are still asked.
+Any client whose callback isn't allowed is refused when it registers.
+
+Any other `MCP_GUARD_*` variable is refused at startup, so a misspelt optional setting can't go
+unnoticed. `guard.yaml` is checked the same way: unknown keys, duplicate or padded tool names, a
+non-https upstream, a Google scope that isn't `.readonly`, and an `mcp` upstream outside
+`googleapis.com` (it would receive people's Google tokens) are refused. The keys of `guard.yaml`
+are in [docs/configuration.md](docs/configuration.md).
+
+## Local test mode (no OAuth client)
+
+`--dev` skips the sign-in: each request brings a Google token in `Authorization: Bearer`, which
+the guard checks with Google. The token must have `gmail.readonly` and `userinfo.email`; `openid`
+is optional, and any other scope gets the token refused (e.g. `https://mail.google.com/` or
+`gmail.modify`, so a full-access Gmail token isn't trusted). It listens on 127.0.0.1 only.
+OAuth Playground is only for this mode; a deployment runs its own sign-in (see
+[DEPLOY.md](DEPLOY.md#scopes)).
+
+1. In [OAuth Playground](https://developers.google.com/oauthplayground), enter the scopes
+   `https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email`,
+   authorize with your account, then "Exchange authorization code for tokens"; copy the access
+   token (valid 1 hour).
+2. `MCP_GUARD_UPSTREAM=gmail MCP_GUARD_ALLOWED_DOMAIN=example.com uv run mcp-guard --dev`
+   (leave out the domain for a personal Google account)
+3. `claude mcp add --transport http gmail http://localhost:3000/mcp --header "Authorization: Bearer <token>"`
+
+To try the full deployed sign-in (Claude Code's OAuth flow, the personal-key page) without any
+Google OAuth client, run the guard against a fake Google:
+`uv run python -m tests.fakes.run_local` ([docs/local-development.md](docs/local-development.md)).
+
+## Run and test
+
+```bash
+uv sync
+uv run pytest          # fake Google, Gmail API and Gmail MCP; no Google needed
+uv run ruff check . && uv run ruff format --check . && uv run pyright
+uv run mcp-guard --port 3000
+curl localhost:3000/health   # {"status":"ok","upstream":"gmail"}; no sign-in, doesn't call the upstream
+docker build -t mcp-guard .  # runs the tests in its test stage
+```
+
+If the upstream can't be reached, agents get "Couldn't reach gmail … Try again later." instead of
+an empty tool list, and every call upstream gives up after 60 s.
+
+`tests/fixtures/gmail_tools.json` is Gmail MCP's tool list. A test checks both Gmail allowlists
+equal the tools Gmail MCP marks read-only, and that the guard's own Gmail API tools are exactly
+those; refresh the snapshot when Gmail changes its tools.
+
+## Status
+
+Runs locally, in `--dev` against real Google and with the full sign-in against a fake Google;
+tried end to end with Claude Code and with a personal key over Streamable HTTP. Not yet deployed
+or tried against real Google sign-in, which needs the Google OAuth client
+([DEPLOY.md](DEPLOY.md)). Payhawk isn't wired: an `mcp` upstream receives the person's Google
+token, and Payhawk needs its own per-person sign-in ([docs/runbooks/payhawk.md](docs/runbooks/payhawk.md)).
+
+Not built: **argument checks.** The allowlist is by tool name, which is enough while every allowed
+tool is read-only whatever its arguments. A tool whose arguments make it dangerous (say a `delete`
+flag) would need a middleware that checks arguments, not just the name.
+
+## Background: restricting MCP tools in Claude and nexos.ai
+
+The research this guard came from: what each product can enforce on its own, and where a proxy is
+needed. All sources were checked on **2026-11-08**.
+
+### Bottom line
 
 On both Claude **Team** and **Enterprise**, the built-in Gmail connector can be made read-only for the whole org: an Owner sets its write tools (or the whole write/delete group) to **Blocked**, Anthropic enforces this on its servers across claude.ai web, Desktop, mobile and Claude Code, and members cannot override it. But this is **not a read-only credential**: the connector's Google grant still holds send permission (`gmail.compose`), so the guarantee lives entirely in Anthropic's policy layer. A **credential-level guarantee** needs an OAuth token that holds only `gmail.readonly`, which you can only get with an **OAuth client you own** (Google's own Gmail MCP server, or your own read-only proxy), with a Google Workspace admin blocking Anthropic's "Claude for Gmail" app. **nexos.ai** has only whole-integration Active / Inactive; the only enforced read-only Gmail there is a read-only MCP server added as a custom MCP. Payhawk's official MCP can be write-blocked in Claude by the same org tool policy; a self-hosted Payhawk proxy needs Payhawk Support to allowlist its redirect URI.
 
@@ -14,7 +141,7 @@ On both Claude **Team** and **Enterprise**, the built-in Gmail connector can be 
 
 **Team-plan gap:** on Team there is no verified-domain restriction, so a member's personal Claude account can connect work Gmail outside the org policy. Closing that requires the Google Workspace admin to block "Claude for Gmail" at Google [GWA] ([runbook](docs/runbooks/google-workspace-admin.md#2-set-the-access-level-for-claude-for-gmail)), with Gmail then reached only through the read-only proxy added by an Owner as a custom connector.
 
-## Comparison of solutions
+### Comparison of solutions
 
 "Enforced" means a technical control rejects the action. "Advisory" means it relies on a person clicking correctly, or on a hint. "Bypassable" means a normal member can get around it.
 
@@ -42,12 +169,17 @@ On both Claude **Team** and **Enterprise**, the built-in Gmail connector can be 
 
 [GWA] marks a step that needs a Google Workspace admin; see [the Workspace admin runbook](docs/runbooks/google-workspace-admin.md).
 
-## Documents
+### Documents
 
 | Document | What it covers | Audience |
 |---|---|---|
+| [DEPLOY.md](DEPLOY.md) | Deploying the guard: Google OAuth client, settings, hosting, storage, connecting Claude and nexos, checks, open items | Engineers, Workspace admins |
+| [docs/configuration.md](docs/configuration.md) | `guard.yaml` reference: upstream kinds, allowlist, pins, limits; the audit line | Engineers |
+| [docs/local-development.md](docs/local-development.md) | Tests, the fake Google, trying the full sign-in with Claude Code and personal keys | Engineers |
+| [docs/nexos-setup.md](docs/nexos-setup.md) | Adding the guard to nexos.ai with personal keys | nexos Owners |
+| [docs/security-model.md](docs/security-model.md) | What the guard guarantees, threats, what is not verified yet | Anyone deciding |
+| [docs/proxy-design.md](docs/proxy-design.md) | Why the guard looks the way it does: design, auth flows, build vs buy | Engineers |
 | [docs/findings.md](docs/findings.md) | Full research findings with references and evidence labels | Anyone deciding |
-| [docs/proxy-design.md](docs/proxy-design.md) | Proposed design for a generic default-deny allowlisting proxy (Gmail, Payhawk) | Engineers; pending decisions |
 | [docs/open-questions.md](docs/open-questions.md) | Decisions that would change the recommendation | Decision makers |
 | [docs/questions-for-stakeholders.md](docs/questions-for-stakeholders.md) | Questions to ask each admin group before rollout, linked to the relevant sections | Everyone involved |
 | [docs/runbooks/google-workspace-admin.md](docs/runbooks/google-workspace-admin.md) | Every step that needs a Google Workspace admin | Workspace admins |
@@ -55,34 +187,8 @@ On both Claude **Team** and **Enterprise**, the built-in Gmail connector can be 
 | [docs/runbooks/claude-code-managed-settings.md](docs/runbooks/claude-code-managed-settings.md) | Claude Code managed MCP allowlist / denylist, deny rules, hooks | IT, Claude Owners |
 | [docs/runbooks/nexos.md](docs/runbooks/nexos.md) | nexos.ai Owner steps | nexos Owners |
 | [docs/runbooks/payhawk.md](docs/runbooks/payhawk.md) | Payhawk MCP options, tool classification, Support request | Claude Owners, finance admins |
-| [docs/local-development.md](docs/local-development.md) | Proxy quick start, tests, trying it with Claude Code | Engineers |
-| [docs/configuration.md](docs/configuration.md) | Proxy config reference, pins, audit log | Engineers |
-| [docs/deploy.md](docs/deploy.md) | Google OAuth client, Cloud Run, Secret Manager, Cloud SQL | Engineers, Workspace admins |
-| [docs/nexos-setup.md](docs/nexos-setup.md) | Adding the proxy to nexos.ai | nexos Owners |
-| [docs/security-model.md](docs/security-model.md) | Proxy guarantees, threats, what is not verified yet | Anyone deciding |
 
-## Read-only proxy
-
-`mcp-ro-proxy` is a default-deny, allowlisting MCP proxy: one Python codebase (FastMCP),
-one YAML config and one deployment per upstream. The first upstream is Gmail, implemented
-natively on the Gmail API with each user's own Google token that holds only
-`gmail.readonly`. Users sign in with Google on the proxy's page and get a revocable
-personal key for nexos.ai custom MCP. Tools are exposed only when allowlisted and their
-definition matches a pinned hash; every call is re-checked and audited.
-
-```sh
-uv sync && uv run pytest -q
-uv run python -m tests.fakes.fake_google --port 9000      # fake Google, for local trials
-uv run mcp-ro-proxy serve --config config/examples/gmail-fake-google.yaml   # see docs
-```
-
-- [docs/local-development.md](docs/local-development.md): quick start, tests, trying it with Claude Code
-- [docs/configuration.md](docs/configuration.md): config reference, pins, audit log
-- [docs/deploy.md](docs/deploy.md): Google OAuth client, Cloud Run, Secret Manager, Cloud SQL
-- [docs/nexos-setup.md](docs/nexos-setup.md): adding the proxy to nexos.ai
-- [docs/security-model.md](docs/security-model.md): guarantees, threats, what is not verified yet
-
-## Reading view
+### Reading view
 
 [docs/site/index.html](docs/site/index.html) presents all of these documents on one page: a table of contents, a filterable and sortable comparison table, the screenshots, rendered diagrams, collapsible runbooks, light and dark mode, and a print layout. The Markdown files stay the source of truth; the HTML is generated from them.
 
@@ -90,7 +196,7 @@ uv run mcp-ro-proxy serve --config config/examples/gmail-fake-google.yaml   # se
 - **Regenerate after editing the Markdown:** `uv run docs/site/build.py`.
 - It will also be shared as a hosted page.
 
-## Evidence labels
+### Evidence labels
 
 - **Verified** = stated in official vendor docs (link given).
 - **Community** = observed by users in public bug reports (GitHub issues), not stated by the vendor.

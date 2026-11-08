@@ -11,8 +11,8 @@ The concrete questions to ask each admin group, which feed these decisions, are 
 
 ## 2. Gmail upstream for the proxy
 
-- **(a)** Native Gmail API adapter: recommended; GA API, we own five read tools.
-- **(b)** Proxy Google's Gmail MCP server: Developer Preview; needs program enrollment.
+- **(a)** Gmail API (`gmail_api`): recommended and the guard's default; GA API, we own six read tools.
+- **(b)** Proxy Google's Gmail MCP server: Developer Preview; needs program enrollment. Already in `guard.yaml` as `gmail-mcp`, so switching is a config change ([README](../README.md#gmail-api-or-gmail-mcp)).
 - **(c)** Buy instead of build: Cloudflare MCP server portal in front of Google's Gmail MCP (and Payhawk MCP), allowlist mode, upstream scope `gmail.readonly` ([build vs buy](proxy-design.md#reuse-an-existing-gateway-or-build)).
 
 ## 3. Payhawk
@@ -26,5 +26,5 @@ The concrete questions to ask each admin group, which feed these decisions, are 
 - Which Claude plan (Team or Enterprise)? Believed to be Team (from the onboarding email), pending confirmation. Enterprise adds custom roles, the verified-domain restriction and Desktop policy without MDM.
 - Are devices MDM-managed? Without MDM, Claude Code sessions on API keys or the nexos gateway escape server-managed MCP controls.
 - Will the Google Workspace admins agree to block "Claude for Gmail" and nexos's Gmail app, and to configure the proxy client as Specific Google data?
-- Does nexos support OAuth for custom MCP? If yes, drop the personal-key mode.
+- Does nexos support OAuth for custom MCP? If yes, nexos users could sign in like Claude's and personal keys could be turned off.
 - Which nexos plan? Plan pages weren't readable; no doc ties integration controls to a plan.

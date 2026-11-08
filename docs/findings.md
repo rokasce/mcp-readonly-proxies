@@ -187,9 +187,9 @@ Controls, all **Verified** from code.claude.com:
 |---|---|---|
 | Org connector tool policy | `blocked` tools are filtered out; an `ask` tool prompts on every call even in `bypassPermissions` | Applies to connectors Claude Code fetches. Desktop local and SSH sessions get only `blocked` ([mcp.md](https://code.claude.com/docs/en/mcp.md#organization-controls-on-connector-tools)) |
 | Permission rules | `"deny": ["mcp__claude_ai_Gmail__send_message", ...]` or `"mcp__claude_ai_Gmail__*"`. A deny rule from any level wins; managed rules can't be overridden, not even by `--allowedTools` | `allowManagedPermissionRulesOnly` makes managed settings the only source of rules ([permissions.md](https://code.claude.com/docs/en/permissions.md)). `mcp__` rules with parentheses are skipped in settings files |
-| MCP allowlist / denylist | `allowManagedMcpServersOnly: true` + `allowedMcpServers: [{serverUrl: "https://gmail-ro.example.com/*"}]` (only these load); `deniedMcpServers: [{serverName: "claude.ai Gmail"}]` | `serverName` is "not a security control" for user-added servers; prefer `serverUrl`. The denylist always wins ([managed-mcp.md](https://code.claude.com/docs/en/managed-mcp.md)) |
+| MCP allowlist / denylist | `allowManagedMcpServersOnly: true` + `allowedMcpServers: [{serverUrl: "https://gmail-guard.example.com/*"}]` (only these load); `deniedMcpServers: [{serverName: "claude.ai Gmail"}]` | `serverName` is "not a security control" for user-added servers; prefer `serverUrl`. The denylist always wins ([managed-mcp.md](https://code.claude.com/docs/en/managed-mcp.md)) |
 | Exclusive set | `managed-mcp.json` loads only listed servers and suppresses claude.ai connectors unless `allowAllClaudeAiMcps: true` | File only (MDM); can't be delivered server-side |
-| Provide a server to all | `managedMcpServers: { "gmail-ro": { "type": "http", "url": "..." } }` | v2.1.259+; skips the allowlist check |
+| Provide a server to all | `managedMcpServers: { "gmail-guard": { "type": "http", "url": "..." } }` | v2.1.259+; skips the allowlist check |
 | Pin scopes for user-added OAuth servers | `"oauth": { "scopes": "https://www.googleapis.com/auth/gmail.readonly" }` | Overrides scopes the server advertises ([mcp.md](https://code.claude.com/docs/en/mcp.md#restrict-oauth-scopes)) |
 | Hooks | A `PreToolUse` hook can deny any call; deny rules hold even if a hook says allow; `allowManagedHooksOnly` restricts hooks to managed ones | [permissions.md](https://code.claude.com/docs/en/permissions.md#extend-permissions-with-hooks) |
 | Disable claude.ai connectors | `disableClaudeAiConnectors: true` (any source set to true wins) | Fetched connectors only |
@@ -407,7 +407,7 @@ The full 82-tool read / write / ambiguous classification is in [runbooks/payhawk
 
 ## 7. The custom read-only proxy route
 
-The design for a generic default-deny allowlisting proxy (one codebase, one deployment per upstream; Gmail native adapter and Payhawk MCP upstream) is in [proxy-design.md](proxy-design.md). The first proxy (Gmail native upstream, personal-key auth for nexos.ai) is now built in this repo (see [configuration.md](configuration.md)); Claude OAuth connector mode, Payhawk wiring and any real deployment are still open.
+The design for a generic default-deny allowlisting proxy (one codebase, one deployment per upstream; Gmail API adapter and Payhawk MCP upstream) is in [proxy-design.md](proxy-design.md). It is now built in this repo as [MCP Guard](../README.md): Gmail on the GA Gmail API by default (Google's Gmail MCP by config), OAuth sign-in for Claude and personal keys for nexos.ai. Payhawk wiring and any real deployment are still open ([DEPLOY.md](../DEPLOY.md#open-items)).
 
 ---
 

@@ -361,8 +361,13 @@ def build_app(
         allowed_domain=settings.allowed_domain,
         routes=routes,
     )
-    # No per-replica MCP session state, so any replica can answer any request.
-    return guard.http_app(stateless_http=True)
+    return guard.http_app(
+        # No per-replica MCP session state, so any replica can answer any request.
+        stateless_http=True,
+        # Checks Host and Origin when the guard listens on localhost (--dev, local runs), so a
+        # web page can't reach it through DNS rebinding.
+        host_origin_protection="auto",
+    )
 
 
 class _AuditFormatter(logging.Formatter):

@@ -495,3 +495,19 @@ async def test_rate_limit_is_per_person(
     async with Client(guard) as client:
         await client.call_tool("search_threads", {})
     assert _audit_lines(caplog)[1]["outcome"] == "rate_limited"
+
+
+async def test_local_guard_refuses_dns_rebinding() -> None:
+    from mcp_guard.server import build_app
+
+    app = build_app(
+        Settings.from_env({"MCP_GUARD_UPSTREAM": "gmail"}, dev=True), upstream(), dev=True
+    )
+    async with app.router.lifespan_context(app):
+        transport = httpx2.ASGITransport(app=app)
+        async with httpx2.AsyncClient(
+            transport=transport, base_url="http://127.0.0.1:3000"
+        ) as http:
+            foreign = {"Host": "evil.example:3000", "Origin": "http://evil.example:3000"}
+            assert (await http.post("/mcp", headers=foreign, json={})).status_code == 421
+            assert (await http.post("/mcp", json={})).status_code == 401

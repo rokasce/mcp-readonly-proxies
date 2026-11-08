@@ -54,10 +54,10 @@ For nexos.ai Owners. Background: [findings.md](../findings.md#5-nexosai). Source
 1. **Turn off built-in Gmail:** Settings > Organization > Integrations (Management > Apps) > Gmail > **Inactive**.
 2. **[GWA] Close the Google side:** ask the Workspace admins to find nexos's Gmail OAuth app under Accessed apps, record its scopes, and set it to **Blocked** (or Specific Google data) so a member can't get write access to Gmail through nexos ([google-workspace-admin.md](google-workspace-admin.md#3-nexosais-gmail-app)).
 3. **Ask nexos** (support / account contact):
-   - Does custom MCP support **OAuth**? If yes, the proxy's personal-key mode can be dropped.
+   - Does custom MCP support **OAuth**? If yes, nexos could sign in like Claude does, without personal keys.
    - The IP ranges nexos calls custom MCP servers from (IP allowlisting is available on request), so the proxy can be firewalled.
    - Which plan the org is on and whether any integration controls depend on it.
-4. **Add the read-only proxy as a custom MCP** (once deployed, see [nexos-setup.md](../nexos-setup.md)): Management > Apps > Add custom MCP, Streamable HTTP, the proxy URL. Each user signs in on the proxy's web page, gets a revocable **personal key**, and pastes it into nexos ([personal key flow](../proxy-design.md#auth-flow-nexos-personal-key-mode)).
+4. **Add the guard as a custom MCP** (once deployed with personal keys on, see [nexos-setup.md](../nexos-setup.md)): Management > Apps > Add custom MCP, Streamable HTTP, the guard's URL. Each user signs in on the guard's `/keys` page, gets a revocable **personal key**, and pastes it into nexos ([personal key flow](../proxy-design.md#auth-flow-nexos-personal-key-mode)).
 5. **Do not rely on HITL** as the read-only control; it is advisory.
 
 ## Claude Code through the nexos gateway

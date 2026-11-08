@@ -66,4 +66,4 @@ The four that change the plan most: 1, 6, 11 and 18.
 22. Where should secrets and refresh tokens live (Secret Manager, Vault), and does the audit log need to go to a central SIEM?
     Related: [Transport and hosting](proxy-design.md#transport-and-hosting), [Logging and audit](proxy-design.md#logging-and-audit).
 23. Does a new internal tool touching email and finance data need a **security review**, and who signs it off?
-    Related: [Proxy design (proposal)](proxy-design.md).
+    Related: [Proxy design](proxy-design.md).
