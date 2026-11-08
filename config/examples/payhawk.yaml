@@ -1,0 +1,54 @@
+# EXAMPLE ONLY - not deployable yet. Shows how an `mcp` upstream is configured.
+#
+# Payhawk's MCP (https://mcp.payhawk.com/mcp) accepts OAuth sign-ins only from allowlisted
+# apps, so a proxy cannot sign users in until Payhawk Support allowlists its redirect URI.
+# Per-user upstream OAuth is not implemented yet (see docs/configuration.md, "mcp upstream").
+# Until then, Claude can use Payhawk directly with its write tools Blocked in the org policy.
+#
+# Workflow once upstream auth is available:
+#   1. Point `upstream.url` at the server and run `mcp-ro-proxy pins --config <this file>`.
+#   2. Review each tool's name, description and input schema; copy only read tools here.
+#   3. Re-run `pins` after Payhawk changes a tool: a changed definition is hidden until
+#      someone reviews it and updates the pin.
+
+upstream:
+  kind: mcp
+  name: payhawk
+  url: https://mcp.payhawk.com/mcp
+  auth:
+    type: none            # placeholder: Payhawk needs per-user OAuth (follow-up)
+  timeout_seconds: 60
+  definition_cache_seconds: 30
+
+server:
+  public_base_url: ${PUBLIC_BASE_URL}
+  mcp_path: /mcp
+
+identity:                 # users still sign in to the proxy with Google Workspace
+  provider: google
+  client_id: ${GOOGLE_CLIENT_ID}
+  client_secret: ${GOOGLE_CLIENT_SECRET}
+  workspace_domain: ${GOOGLE_WORKSPACE_DOMAIN}
+
+client_auth:
+  mode: personal_key
+
+storage:
+  database_url: ${DATABASE_URL:-sqlite:///./data/payhawk-ro.db}
+  encryption_keys: ${TOKEN_ENCRYPTION_KEYS}
+  session_secret: ${SESSION_SECRET}
+
+# Candidates from Payhawk's read tools (docs/findings.md). The all-zero pins are
+# placeholders and fail closed: no tool is exposed until real pins are captured.
+allow:
+  - name: list_expenses
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  - name: get_expense
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  - name: list_cards
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false}
+    max_response_bytes: 262144
+# Never allowlist write or ambiguous tools such as create_expense, approve_or_return,
+# update_card_status, payments_agent or dispatch_widget_action. Config validation rejects
+# readOnlyHint: false, but the real protection is that they are simply not listed here.
