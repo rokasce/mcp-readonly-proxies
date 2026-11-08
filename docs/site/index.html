@@ -167,9 +167,22 @@ Model Armor) in front of its Workspace MCP servers. The Gmail API has none of th
 same <code>gmail.readonly</code> token, so the read-only floor is the same, and the guard's tools have the same
 names as Gmail MCP's read-only ones, so agents see no difference.</p>
 <p>To switch once Gmail MCP is generally available, set <code>MCP_GUARD_UPSTREAM=gmail-mcp</code> (the entry is
-already in <code>guard.yaml</code>); nothing else changes, not even the OAuth client. Optionally pin its tool
-definitions (<code>pins</code>, <a href="#configuration--pins">docs/configuration.md</a>) so a changed tool is
-dropped until reviewed.</p>
+already in <code>guard.yaml</code>); the guard's code and Claude's and nexos's setup stay the same. On the
+Google side:</p>
+<ul>
+<li>enable the Gmail MCP API (<code>gmailmcp.googleapis.com</code>) in the OAuth client's Cloud project;</li>
+<li>tick <strong>Use this client for an AI-powered agent</strong> on the guard's OAuth client (Google Auth Platform<blockquote>
+<p>Clients). Google requires it for clients that call its Workspace MCP servers; if the existing
+  client can't take it, create a new one and update <code>MCP_GUARD_GOOGLE_CLIENT_ID</code>/<code>_SECRET</code>;</p>
+</blockquote>
+</li>
+<li>check Google's terms at that point (while in preview: enrolment, and screening prompts and
+  responses for prompt injection, with Model Armor or a documented solution of your own).</li>
+</ul>
+<p>Then capture Gmail MCP's live <code>tools/list</code>: Google's public tool reference lists fewer tools than
+the guard's fixture (<code>tests/fixtures/gmail_tools.json</code>, <code>get_draft</code> among the missing), so compare
+the allowlist with it, and pin the tool definitions (<code>pins</code>,
+<a href="#configuration--pins">docs/configuration.md</a>) so a changed tool is dropped until reviewed.</p>
 <h2 id="readme--settings">Settings</h2>
 <div class="table-wrap"><table>
 <thead>
@@ -1588,7 +1601,7 @@ needed. All sources were checked on <strong>2026-11-08</strong>.</p>
 <td><strong>[GWA]</strong>, with care: existing untrusted tokens are revoked</td>
 </tr>
 <tr>
-<td>Claude: Organization settings &gt; Connectors &gt; Add &gt; Custom &gt; Web, proxy URL, "Sign in when needed", OAuth client "Register automatically" (DCR) or "Use your own OAuth client". Set every exposed tool to Always allow (they are all read)</td>
+<td>Claude: Organization settings &gt; Connectors &gt; Add &gt; Custom &gt; Web, proxy URL, "Sign in when needed", OAuth client "Use Claude's published identity" (CIMD, recommended) or "Register automatically" (DCR). Set every exposed tool to Always allow (they are all read)</td>
 <td>Claude Owner</td>
 </tr>
 <tr>
@@ -1643,6 +1656,11 @@ needed. All sources were checked on <strong>2026-11-08</strong>.</p>
 <td><strong>Cloudflare MCP server portals</strong> (managed; docs updated 2026-11-05)</td>
 <td>Portal behind Cloudflare Access; users sign in through your IdP. Per-tool on/off, and an <strong>allowlist mode via API</strong> (<code>default_disabled: true</code> + <code>updated_tools</code>); otherwise "new tools and prompts are automatically enabled". Per-user upstream OAuth with <strong>your own OAuth client and an explicit Scope field</strong> ("Require user auth"). Access request logs; optional Gateway HTTP logs and DLP. Claude Desktop/claude.ai setup documented (redirect <code>https://claude.ai/api/mcp/auth_callback</code>) (<a href="https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/" target="_blank" rel="noopener">MCP portals</a>)</td>
 <td><strong>Best "buy" candidate.</strong> Limits: it only fronts MCP servers, so Gmail would sit behind Google's Developer Preview Gmail MCP; no documented pinning of tool definitions (an allowlisted name whose schema changes stays exposed); nexos would need Access OAuth or a shared service token; Payhawk still needs its redirect allowlist to include Cloudflare's callback; adds Cloudflare to the data path; Zero Trust plan cost not checked</td>
+</tr>
+<tr>
+<td><strong>Google Cloud IAM deny policy on MCP tools</strong> (Google-side)</td>
+<td>A deny policy on <code>tools.call</code> with the condition <code>mcp.googleapis.com/tool.isReadOnly == false</code>, set at organisation, folder or project level, refuses every tool Google doesn't mark read-only; but "When an MCP client calls <code>tools/list</code>, a list of all tools is returned, including read-write tools" (<a href="https://docs.cloud.google.com/mcp/prevent-read-write-tool-use" target="_blank" rel="noopener">prevent read-write tool use</a>). The page doesn't say whether Workspace MCP servers (Gmail) are covered</td>
+<td>Only for the <code>gmail-mcp</code> upstream, and only as a second layer under the guard's allowlist and the read-only scope: it trusts Google's own read-only flags and doesn't hide write tools. Test it when switching to Gmail MCP</td>
 </tr>
 <tr>
 <td><strong>Docker MCP Gateway</strong></td>
@@ -1876,7 +1894,8 @@ needed. All sources were checked on <strong>2026-11-08</strong>.</p>
 <li><strong>Add the custom connector:</strong> Organization settings &gt; Connectors &gt; Add &gt; Custom &gt; Web.
    - URL: the guard's URL (e.g. <code>https://gmail-guard.example.com/mcp</code>), or for Google's server <code>https://gmailmcp.googleapis.com/mcp/v1</code> with client ID and secret under Advanced.
    - Sign-in: "Sign in when needed".
-   - OAuth client: "Register automatically" (DCR) or "Use your own OAuth client".
+   - OAuth client, for the guard: "Use Claude's published identity" (Claude's client metadata document, CIMD; Anthropic's recommended option, and the guard holds it to Claude's callbacks). "Register automatically" (DCR) also works. For Google's server: "Use your own OAuth client".
+   - Authentication settings can't be changed after the connector is added; changing them means removing and re-adding it, and every member connecting again (<a href="https://claude.com/docs/connectors/custom/add-unlisted.md" target="_blank" rel="noopener">add an unlisted connector</a>).
    - The OAuth callback is <code>https://claude.ai/api/mcp/auth_callback</code>.
    - The server must be publicly reachable from Anthropic's cloud, or exposed through <a href="https://claude.com/docs/connectors/mcp-tunnels/overview.md" target="_blank" rel="noopener">MCP tunnels</a>.</li>
 <li><strong>Tool policy:</strong> the org tool policy covers custom connectors too ("Connector permissions govern connectors your organization has added under Organization settings &gt; Connectors", <a href="https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans" target="_blank" rel="noopener">13930452</a>).
@@ -2623,7 +2642,9 @@ refuses to start outside <code>--dev</code>. Putting a gateway in front doesn't 
    <code>https://&lt;guard public URL&gt;/auth/callback</code> (Claude's sign-in) and, if personal keys are on,
    <code>https://&lt;guard public URL&gt;/keys/callback</code>. No JavaScript origins are needed.</li>
 <li><strong>Gmail API enabled</strong> in the project (<code>gmail.googleapis.com</code>), for the default <code>gmail_api</code>
-   upstream. <strong>Open:</strong> whether Gmail MCP (<code>gmail-mcp</code>) needs anything beyond its preview enrolment.</li>
+   upstream. Gmail MCP (<code>gmail-mcp</code>) needs more: the Gmail MCP API (<code>gmailmcp.googleapis.com</code>)
+   enabled and the client marked <strong>Use this client for an AI-powered agent</strong> (README, "Gmail API
+   or Gmail MCP").</li>
 </ol>
 <p>The client ID and secret become <code>MCP_GUARD_GOOGLE_CLIENT_ID</code> and
 <code>MCP_GUARD_GOOGLE_CLIENT_SECRET</code>. The secret goes straight into the secret store, never into
@@ -2757,7 +2778,8 @@ guard refuse to start, so a typo can't silently switch something off.</p>
   allowed (an agent trying to write), and on the pin-drift warning.</li>
 <li><strong>Limits:</strong> per person 2 requests per second with bursts of 20, results cut at 1 MB (both in
   <code>guard.yaml</code>). Gmail API quota is shared by everyone on the OAuth client, so one runaway agent
-  can't use it up.</li>
+  can't use it up. The rate limit is counted in each replica's memory, so with N replicas a
+  person can make up to N times as many requests.</li>
 </ul>
 <h3 id="deploy--behind-the-mcp-gateway">Behind the MCP gateway</h3>
 <p><code>internal-mcp</code> sits behind the company MCP gateway (provisional), which signs people in with their
@@ -2767,10 +2789,11 @@ unchanged, or whether the guard is exposed directly with its own URL. Exposed di
 built for today.</p>
 <h2 id="deploy--4-connecting-clients">4. Connecting clients</h2>
 <p>The guard serves MCP over Streamable HTTP at <code>https://&lt;guard&gt;/mcp</code>. A client signs people in with
-standard MCP OAuth: it registers itself with the guard (dynamic client registration, or a client
-metadata document as Claude Code uses), sends the person to sign in, and is called back on its own
-redirect URI. <strong>Only callbacks in <code>MCP_GUARD_CLIENT_REDIRECT_URIS</code> may register</strong>, so another app
-can't collect people's Gmail access; by default that is Claude only.</p>
+standard MCP OAuth: it identifies itself to the guard (a client metadata document, CIMD, as
+Claude.ai and Claude Code do when the guard offers it, or dynamic client registration), sends the
+person to sign in, and is called back on its own redirect URI. <strong>Only callbacks in
+<code>MCP_GUARD_CLIENT_REDIRECT_URIS</code> are accepted</strong>, either way, so another app can't collect people's
+Gmail access; by default that is Claude only.</p>
 <h3 id="deploy--claude-code">Claude Code</h3>
 <pre><code class="language-bash">claude mcp add --transport http gmail https://&lt;guard&gt;/mcp
 </code></pre>
@@ -2778,9 +2801,13 @@ can't collect people's Gmail access; by default that is Claude only.</p>
 allowed by default. To push it to everyone, use managed settings
 (<a href="#rb-claude-code-managed-settings">runbook</a>).</p>
 <h3 id="deploy--claudeai-and-claude-desktop">Claude.ai and Claude Desktop</h3>
-<p>Add a custom connector with the URL <code>https://&lt;guard&gt;/mcp</code>, then connect and sign in with Google.
-Callbacks <code>https://claude.ai/api/mcp/auth_callback</code> and <code>https://claude.com/api/mcp/auth_callback</code>
-are allowed by default. Organisation Owners can add it once for everyone, set its tools to Always
+<p>Add a custom connector with the URL <code>https://&lt;guard&gt;/mcp</code> and, under OAuth client, "Use Claude's
+published identity"; then connect and sign in with Google. Callbacks
+<code>https://claude.ai/api/mcp/auth_callback</code> (the one Anthropic documents) and
+<code>https://claude.com/api/mcp/auth_callback</code> are allowed by default. Claude.ai reaches the guard from
+Anthropic's cloud (<code>160.79.104.0/21</code>), and gives the guard's sign-in endpoints 10 seconds to answer;
+people's browsers must reach <code>/authorize</code>, the Google callback and <code>/keys</code> too, so don't limit the
+guard to Anthropic's and nexos's addresses. Organisation Owners can add it once for everyone, set its tools to Always
 allow (they are all reads), and block the built-in Gmail connector
 (<a href="#rb-claude-org">runbook</a>).</p>
 <h3 id="deploy--nexosai">nexos.ai</h3>
@@ -2817,7 +2844,34 @@ call gets 401.</p>
   <code>internal-mcp</code>; only GitHub Actions exists today.</li>
 <li>Exposed directly or behind the MCP gateway.</li>
 <li>nexos.ai: which header it sends the key in (both <code>Authorization: Bearer</code> and <code>X-API-Key</code> are
-  accepted), and whether its "Test connection" works before a key exists.</li>
+  accepted), whether its "Test connection" works before a key exists, and whether a key entered
+  at setup is shared with members (<a href="#nexos-setup">docs/nexos-setup.md</a>).</li>
+</ul>
+<h2 id="deploy--things-to-keep-in-mind">Things to keep in mind</h2>
+<ul>
+<li><strong>The guard limits only itself.</strong> People can still reach Gmail another way: Anthropic's own Gmail
+  connector, nexos's built-in Gmail app, or any other app holding a Gmail grant. Block those
+  (step 6 and the Claude runbook), or the guard is only one of several doors.</li>
+<li><strong>Read-only isn't harmless.</strong> Mail is untrusted input: a message can carry instructions an agent
+  follows (prompt injection), and an agent that also has a tool that writes or fetches elsewhere
+  (another connector, web access) can be steered into copying mail out. The guard stops writes to
+  Gmail, not that; keep agents with Gmail access away from tools that send data out, or require
+  approval for those.</li>
+<li><strong>Google keeps at most 100 refresh tokens per person per OAuth client</strong> and silently drops the
+  oldest. Every Claude sign-in and every new personal key uses one, so someone signing in very
+  often could find an older sign-in or key stops working (they sign in again or make a new key).</li>
+<li><strong>Personal keys are bearer credentials</strong> to a whole mailbox for 180 days, stored by nexos. Revoke
+  a key when someone leaves nexos; suspending the person in Workspace also stops it, because Google
+  then refuses the stored token.</li>
+<li><strong>Google's tokeninfo endpoint</strong> is meant for debugging and "may be throttled or otherwise subject
+  to intermittent errors" (<a href="https://developers.google.com/identity/openid-connect/openid-connect" target="_blank" rel="noopener">OpenID Connect</a>).
+  The guard checks each token there, cached for up to a minute; at large scale or if throttling
+  shows up in the logs, verify tokens another way.</li>
+<li><strong>One domain.</strong> <code>MCP_GUARD_ALLOWED_DOMAIN</code> takes one Workspace domain, compared with the
+  account's <code>hd</code>; check what <code>hd</code> a secondary-domain account gets before relying on it in a
+  multi-domain Workspace.</li>
+<li><strong>Claude connector settings are fixed once added</strong>: changing the OAuth client choice means
+  removing and re-adding the connector, and everyone connects again.</li>
 </ul></div></details><details class="runbook" id="nexos-setup"><summary>Adding the guard to nexos.ai<span class="tag">runbook</span></summary><div class="doc-body"><p class="src-note" style="color:var(--muted);font-size:.85rem;margin:4px 0 0">Source: <code>docs/nexos-setup.md</code></p>
 <p>nexos.ai can only switch whole integrations on or off; it has no per-tool restriction. To give
 nexos users read-only Gmail, keep nexos's built-in Gmail integration off and add the guard as a
@@ -2838,7 +2892,10 @@ serving Claude over OAuth.</p>
    - <strong>Authentication</strong>: API key, provided by each user individually.
    - <strong>Configuration</strong>: none needed.</li>
 <li><strong>Test connection</strong>: the guard answers <code>401</code> to MCP requests without a key. If the test needs
-   a key, make one for yourself first (below) and test with it.</li>
+   a key, don't paste your own: nexos doesn't document whether a key entered here becomes a default
+   for members who haven't added theirs, and with your key every member would read your mailbox.
+   Test with a key of a throwaway account in the domain, revoke it afterwards, and confirm with
+   nexos (or a second test member) that members without a key get no access.</li>
 <li>Optional: ask nexos for their egress IPs and restrict the guard's ingress to them plus your
    users' networks (Claude.ai's servers need to reach it too, if Claude.ai connectors are used).</li>
 </ol>
@@ -2871,7 +2928,9 @@ exists on this server, and the Google token behind it can't do any of that eithe
 <h2 id="nexos-setup--not-verified-yet">Not verified yet</h2>
 <p>nexos access was not available while building this, so these are untested against the real
 product: the header nexos sends the key in, whether "Test connection" works before a key exists,
-and how nexos HITL classifies the tools. Check them during the pilot.</p></div></details><details class="runbook" id="security-model"><summary>Security model of the guard<span class="tag">runbook</span></summary><div class="doc-body"><p class="src-note" style="color:var(--muted);font-size:.85rem;margin:4px 0 0">Source: <code>docs/security-model.md</code></p>
+whether a key entered at setup is shared with members, and how nexos HITL classifies the tools.
+Check them during the pilot. As of November 2026 nexos documents no OAuth for custom MCP and no
+egress IPs (available on request).</p></div></details><details class="runbook" id="security-model"><summary>Security model of the guard<span class="tag">runbook</span></summary><div class="doc-body"><p class="src-note" style="color:var(--muted);font-size:.85rem;margin:4px 0 0">Source: <code>docs/security-model.md</code></p>
 <p>What the guard guarantees, how, and what it does not cover. The research behind the design
 (Claude and nexos.ai controls, Gmail scopes, Workspace controls) is in
 <a href="#findings">findings.md</a>.</p>
@@ -3051,7 +3110,7 @@ connection".</p></div></details>
 <h2 id="open-questions--2-gmail-upstream-for-the-proxy">2. Gmail upstream for the proxy</h2>
 <ul>
 <li><strong>(a)</strong> Gmail API (<code>gmail_api</code>): recommended and the guard's default; GA API, we own six read tools.</li>
-<li><strong>(b)</strong> Proxy Google's Gmail MCP server: Developer Preview; needs program enrollment. Already in <code>guard.yaml</code> as <code>gmail-mcp</code>, so switching is a config change (<a href="#readme--gmail-api-or-gmail-mcp">README</a>).</li>
+<li><strong>(b)</strong> Proxy Google's Gmail MCP server: Developer Preview; needs program enrollment. Already in <code>guard.yaml</code> as <code>gmail-mcp</code>, so switching is a config change plus Google-side setup: the Gmail MCP API enabled and the OAuth client marked as an AI agent client (<a href="#readme--gmail-api-or-gmail-mcp">README</a>).</li>
 <li><strong>(c)</strong> Buy instead of build: Cloudflare MCP server portal in front of Google's Gmail MCP (and Payhawk MCP), allowlist mode, upstream scope <code>gmail.readonly</code> (<a href="#proxy-design--reuse-an-existing-gateway-or-build">build vs buy</a>).</li>
 </ul>
 <h2 id="open-questions--3-payhawk">3. Payhawk</h2>

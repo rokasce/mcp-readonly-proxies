@@ -26,7 +26,9 @@ upstreams:
     rate_limit: {per_second: 2, burst: 20}
 
   # Alternative: Google's own Gmail MCP server (Developer Preview). Switch with
-  # MCP_GUARD_UPSTREAM=gmail-mcp. The allowlist is the tools Gmail MCP marks read-only.
+  # MCP_GUARD_UPSTREAM=gmail-mcp, after the Google-side setup in README.md. The allowlist is the
+  # tools Gmail MCP marks read-only in tests/fixtures/gmail_tools.json; Google's public reference
+  # lists fewer tools (no get_draft), so compare with the live tools/list before switching.
   gmail-mcp:
     kind: mcp
     url: https://gmailmcp.googleapis.com/mcp/v1

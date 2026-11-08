@@ -63,7 +63,8 @@ Credential-level read-only. Needs the guard deployed ([DEPLOY.md](../../DEPLOY.m
 1. **Add the custom connector:** Organization settings > Connectors > Add > Custom > Web.
    - URL: the guard's URL (e.g. `https://gmail-guard.example.com/mcp`), or for Google's server `https://gmailmcp.googleapis.com/mcp/v1` with client ID and secret under Advanced.
    - Sign-in: "Sign in when needed".
-   - OAuth client: "Register automatically" (DCR) or "Use your own OAuth client".
+   - OAuth client, for the guard: "Use Claude's published identity" (Claude's client metadata document, CIMD; Anthropic's recommended option, and the guard holds it to Claude's callbacks). "Register automatically" (DCR) also works. For Google's server: "Use your own OAuth client".
+   - Authentication settings can't be changed after the connector is added; changing them means removing and re-adding it, and every member connecting again ([add an unlisted connector](https://claude.com/docs/connectors/custom/add-unlisted.md)).
    - The OAuth callback is `https://claude.ai/api/mcp/auth_callback`.
    - The server must be publicly reachable from Anthropic's cloud, or exposed through [MCP tunnels](https://claude.com/docs/connectors/mcp-tunnels/overview.md).
 2. **Tool policy:** the org tool policy covers custom connectors too ("Connector permissions govern connectors your organization has added under Organization settings > Connectors", [13930452](https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans)).

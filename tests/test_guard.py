@@ -8,6 +8,7 @@ from fastmcp import Client, FastMCP
 from fastmcp.client.transports import StreamableHttpTransport
 from fastmcp.exceptions import ToolError
 from fastmcp.server.auth import AccessToken
+from fastmcp.server.auth.cimd import CIMDDocument, CIMDFetcher
 from fastmcp.server.providers.proxy import ProxyClient
 
 from mcp_guard.config import GuardConfig, Settings, Upstream
@@ -190,6 +191,48 @@ async def test_only_claude_clients_can_register(
                 },
             )
     assert (response.status_code == 201) is accepted, response.text
+
+
+@pytest.mark.parametrize(
+    ("redirect_uri", "accepted"),
+    [
+        ("https://claude.ai/api/mcp/auth_callback", True),
+        ("https://evil.example/callback", False),
+    ],
+)
+async def test_only_claude_clients_can_sign_in_by_metadata_document(
+    signin_app: Any, monkeypatch: pytest.MonkeyPatch, redirect_uri: str, accepted: bool
+) -> None:
+    """Claude.ai identifies itself with a client metadata document (CIMD), a URL as client_id,
+    instead of registering; its callbacks are held to the same allowlist."""
+
+    async def fetch(self: CIMDFetcher, client_id_url: str) -> CIMDDocument:
+        return CIMDDocument.model_validate(
+            {"client_id": client_id_url, "redirect_uris": [redirect_uri]}
+        )
+
+    monkeypatch.setattr(CIMDFetcher, "fetch", fetch)
+    async with signin_app.router.lifespan_context(signin_app):
+        transport = httpx2.ASGITransport(app=signin_app)
+        async with httpx2.AsyncClient(
+            transport=transport, base_url="https://guard.example"
+        ) as http:
+            metadata = (await http.get("/.well-known/oauth-authorization-server")).json()
+            response = await http.get(
+                "/authorize",
+                params={
+                    "client_id": "https://client.example/oauth/metadata.json",
+                    "redirect_uri": redirect_uri,
+                    "response_type": "code",
+                    "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+                    "code_challenge_method": "S256",
+                    "state": "s",
+                },
+            )
+    assert metadata["client_id_metadata_document_supported"] is True
+    assert (response.status_code in (200, 302)) is accepted, response.text
+    if accepted:  # on to the guard's consent page, not back to the client with an error
+        assert "error" not in response.headers.get("location", "")
 
 
 async def test_sign_in_asks_google_for_read_only_access_only(signin_app: Any) -> None:

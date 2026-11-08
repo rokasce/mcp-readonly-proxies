@@ -21,7 +21,10 @@ serving Claude over OAuth.
    - **Authentication**: API key, provided by each user individually.
    - **Configuration**: none needed.
 3. **Test connection**: the guard answers `401` to MCP requests without a key. If the test needs
-   a key, make one for yourself first (below) and test with it.
+   a key, don't paste your own: nexos doesn't document whether a key entered here becomes a default
+   for members who haven't added theirs, and with your key every member would read your mailbox.
+   Test with a key of a throwaway account in the domain, revoke it afterwards, and confirm with
+   nexos (or a second test member) that members without a key get no access.
 4. Optional: ask nexos for their egress IPs and restrict the guard's ingress to them plus your
    users' networks (Claude.ai's servers need to reach it too, if Claude.ai connectors are used).
 
@@ -59,4 +62,6 @@ exists on this server, and the Google token behind it can't do any of that eithe
 
 nexos access was not available while building this, so these are untested against the real
 product: the header nexos sends the key in, whether "Test connection" works before a key exists,
-and how nexos HITL classifies the tools. Check them during the pilot.
+whether a key entered at setup is shared with members, and how nexos HITL classifies the tools.
+Check them during the pilot. As of November 2026 nexos documents no OAuth for custom MCP and no
+egress IPs (available on request).

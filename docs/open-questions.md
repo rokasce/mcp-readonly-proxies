@@ -12,7 +12,7 @@ The concrete questions to ask each admin group, which feed these decisions, are 
 ## 2. Gmail upstream for the proxy
 
 - **(a)** Gmail API (`gmail_api`): recommended and the guard's default; GA API, we own six read tools.
-- **(b)** Proxy Google's Gmail MCP server: Developer Preview; needs program enrollment. Already in `guard.yaml` as `gmail-mcp`, so switching is a config change ([README](../README.md#gmail-api-or-gmail-mcp)).
+- **(b)** Proxy Google's Gmail MCP server: Developer Preview; needs program enrollment. Already in `guard.yaml` as `gmail-mcp`, so switching is a config change plus Google-side setup: the Gmail MCP API enabled and the OAuth client marked as an AI agent client ([README](../README.md#gmail-api-or-gmail-mcp)).
 - **(c)** Buy instead of build: Cloudflare MCP server portal in front of Google's Gmail MCP (and Payhawk MCP), allowlist mode, upstream scope `gmail.readonly` ([build vs buy](proxy-design.md#reuse-an-existing-gateway-or-build)).
 
 ## 3. Payhawk

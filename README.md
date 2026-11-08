@@ -46,9 +46,20 @@ same `gmail.readonly` token, so the read-only floor is the same, and the guard's
 names as Gmail MCP's read-only ones, so agents see no difference.
 
 To switch once Gmail MCP is generally available, set `MCP_GUARD_UPSTREAM=gmail-mcp` (the entry is
-already in `guard.yaml`); nothing else changes, not even the OAuth client. Optionally pin its tool
-definitions (`pins`, [docs/configuration.md](docs/configuration.md#pins)) so a changed tool is
-dropped until reviewed.
+already in `guard.yaml`); the guard's code and Claude's and nexos's setup stay the same. On the
+Google side:
+
+- enable the Gmail MCP API (`gmailmcp.googleapis.com`) in the OAuth client's Cloud project;
+- tick **Use this client for an AI-powered agent** on the guard's OAuth client (Google Auth Platform
+  > Clients). Google requires it for clients that call its Workspace MCP servers; if the existing
+  client can't take it, create a new one and update `MCP_GUARD_GOOGLE_CLIENT_ID`/`_SECRET`;
+- check Google's terms at that point (while in preview: enrolment, and screening prompts and
+  responses for prompt injection, with Model Armor or a documented solution of your own).
+
+Then capture Gmail MCP's live `tools/list`: Google's public tool reference lists fewer tools than
+the guard's fixture (`tests/fixtures/gmail_tools.json`, `get_draft` among the missing), so compare
+the allowlist with it, and pin the tool definitions (`pins`,
+[docs/configuration.md](docs/configuration.md#pins)) so a changed tool is dropped until reviewed.
 
 ## Settings
 
