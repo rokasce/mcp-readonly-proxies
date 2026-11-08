@@ -11,6 +11,7 @@ The Markdown files are the source of truth. After editing any of them, run:
 The output is one self-contained HTML file (inline CSS and JS; images are
 referenced relatively from docs/images; Mermaid is loaded from a pinned CDN URL).
 """
+
 from __future__ import annotations
 
 import html
@@ -29,13 +30,33 @@ DOCS = [
     ("readme", "README.md", "Overview", "main"),
     ("findings", "docs/findings.md", "Findings", "main"),
     ("proxy-design", "docs/proxy-design.md", "Proxy design (proposal)", "main"),
-    ("rb-google-workspace-admin", "docs/runbooks/google-workspace-admin.md", "Google Workspace admin", "runbook"),
+    (
+        "rb-google-workspace-admin",
+        "docs/runbooks/google-workspace-admin.md",
+        "Google Workspace admin",
+        "runbook",
+    ),
     ("rb-claude-org", "docs/runbooks/claude-org.md", "Claude org (Owner)", "runbook"),
-    ("rb-claude-code-managed-settings", "docs/runbooks/claude-code-managed-settings.md", "Claude Code managed settings", "runbook"),
+    (
+        "rb-claude-code-managed-settings",
+        "docs/runbooks/claude-code-managed-settings.md",
+        "Claude Code managed settings",
+        "runbook",
+    ),
     ("rb-nexos", "docs/runbooks/nexos.md", "nexos.ai", "runbook"),
     ("rb-payhawk", "docs/runbooks/payhawk.md", "Payhawk", "runbook"),
+    ("local-development", "docs/local-development.md", "Local development", "runbook"),
+    ("configuration", "docs/configuration.md", "Configuration", "runbook"),
+    ("deploy", "docs/deploy.md", "Deploy to Cloud Run", "runbook"),
+    ("nexos-setup", "docs/nexos-setup.md", "nexos.ai setup", "runbook"),
+    ("security-model", "docs/security-model.md", "Security model", "runbook"),
     ("open-questions", "docs/open-questions.md", "Open questions", "main"),
-    ("questions-for-stakeholders", "docs/questions-for-stakeholders.md", "Questions for stakeholders", "main"),
+    (
+        "questions-for-stakeholders",
+        "docs/questions-for-stakeholders.md",
+        "Questions for stakeholders",
+        "main",
+    ),
 ]
 PATH_TO_ID = {p: i for i, p, _, _ in DOCS}
 
@@ -87,12 +108,14 @@ def render(doc_id: str, doc_path: str) -> tuple[str, str, list[tuple[str, str]]]
     m = re.search(r"<h1 id=\"[^\"]*\">(.*?)</h1>", body, re.S)
     title = m.group(1) if m else doc_id
     if m:
-        body = body[: m.start()] + body[m.end():]
+        body = body[: m.start()] + body[m.end() :]
 
     # Mermaid fences -> <pre class="mermaid">.
     body = re.sub(
         r'<pre><code class="language-mermaid">(.*?)</code></pre>',
-        lambda mm: f'<pre class="mermaid" data-src="{html.escape(html.unescape(mm.group(1)), quote=True)}">{mm.group(1)}</pre>',
+        lambda mm: (
+            f'<pre class="mermaid" data-src="{html.escape(html.unescape(mm.group(1)), quote=True)}">{mm.group(1)}</pre>'
+        ),
         body,
         flags=re.S,
     )
@@ -129,7 +152,9 @@ def render(doc_id: str, doc_path: str) -> tuple[str, str, list[tuple[str, str]]]
     body = re.sub(r'<a href="([^"]+)"', link, body)
 
     # Wide tables scroll horizontally inside their own box.
-    body = body.replace("<table>", '<div class="table-wrap"><table>').replace("</table>", "</table></div>")
+    body = body.replace("<table>", '<div class="table-wrap"><table>').replace(
+        "</table>", "</table></div>"
+    )
 
     h2s = re.findall(r'<h2 id="([^"]+)">(.*?)</h2>', body, re.S)
     return title, body, [(i, re.sub(r"<[^>]+>", "", t)) for i, t in h2s]
@@ -150,7 +175,11 @@ def mark_comparison_table(body: str) -> str:
         '<span class="hint">Click a column header to sort.</span>'
         "</div>"
     )
-    return body[:j] + controls + body[j:].replace("<table>", '<table id="compare" class="sortable">', 1)
+    return (
+        body[:j]
+        + controls
+        + body[j:].replace("<table>", '<table id="compare" class="sortable">', 1)
+    )
 
 
 CSS = r"""
@@ -327,7 +356,11 @@ def main() -> None:
     for doc_id, path, label, group in DOCS:
         title, body, h2s = rendered[doc_id]
         sub = "".join(f'<li><a href="#{i}">{t}</a></li>' for i, t in h2s) if group == "main" else ""
-        item = f'<li><a href="#{doc_id}">{html.escape(label)}</a>' + (f"<ul>{sub}</ul>" if sub else "") + "</li>"
+        item = (
+            f'<li><a href="#{doc_id}">{html.escape(label)}</a>'
+            + (f"<ul>{sub}</ul>" if sub else "")
+            + "</li>"
+        )
         src_note = f'<p class="src-note" style="color:var(--muted);font-size:.85rem;margin:4px 0 0">Source: <code>{path}</code></p>'
         if group == "runbook":
             nav_rb.append(item)
@@ -340,10 +373,20 @@ def main() -> None:
             block = f'<section class="doc" id="{doc_id}"><h1>{title}</h1>{src_note}{body}</section>'
             sections_main.append((doc_id, block))
 
-    before = [b for i, b in sections_main if i not in ("open-questions", "questions-for-stakeholders")]
+    before = [
+        b for i, b in sections_main if i not in ("open-questions", "questions-for-stakeholders")
+    ]
     after = [b for i, b in sections_main if i in ("open-questions", "questions-for-stakeholders")]
-    nav_main_items = [n for n in nav_main if 'href="#open-questions"' not in n and 'href="#questions-for-stakeholders"' not in n]
-    nav_after = [n for n in nav_main if 'href="#open-questions"' in n or 'href="#questions-for-stakeholders"' in n]
+    nav_main_items = [
+        n
+        for n in nav_main
+        if 'href="#open-questions"' not in n and 'href="#questions-for-stakeholders"' not in n
+    ]
+    nav_after = [
+        n
+        for n in nav_main
+        if 'href="#open-questions"' in n or 'href="#questions-for-stakeholders"' in n
+    ]
 
     page = f"""<!doctype html>
 <html lang="en">
@@ -362,16 +405,16 @@ def main() -> None:
 <nav class="side" id="side" aria-label="Contents">
 <p class="brand">Read-only MCP findings</p>
 <p class="sub">Gmail and Payhawk in Claude and nexos.ai. Sources checked 2026-11-08.</p>
-<h4>Documents</h4><ul>{''.join(nav_main_items)}</ul>
-<h4>Runbooks</h4><ul>{''.join(nav_rb)}</ul>
-<h4>Decisions</h4><ul>{''.join(nav_after)}</ul>
+<h4>Documents</h4><ul>{"".join(nav_main_items)}</ul>
+<h4>Runbooks</h4><ul>{"".join(nav_rb)}</ul>
+<h4>Decisions</h4><ul>{"".join(nav_after)}</ul>
 <button class="theme-btn" type="button">Dark mode</button>
 </nav>
 <main>
-{''.join(before)}
+{"".join(before)}
 <h2 class="group-title" id="runbooks">Runbooks</h2>
-{''.join(sections_rb)}
-{''.join(after)}
+{"".join(sections_rb)}
+{"".join(after)}
 </main>
 </div>
 <script src="{MERMAID_URL}"></script>

@@ -1,0 +1,69 @@
+[project]
+name = "mcp-ro-proxy"
+version = "0.1.0"
+description = "Default-deny, allowlisting read-only MCP proxy (Gmail first) for Claude and nexos.ai"
+readme = "README.md"
+license = { text = "Proprietary" }
+authors = [{ name = "erce", email = "rokasce@gmail.com" }]
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=4.1.6,<5",
+    "httpx2>=2.16",
+    "pydantic>=2.14",
+    "pyyaml>=6.0",
+    "cryptography>=50",
+    "pyjwt[crypto]>=2.15",
+    "sqlalchemy>=2.0.40",
+    "itsdangerous>=2.2",
+    "jsonschema>=4.26",
+    "python-multipart>=0.0.33",
+    "uvicorn>=0.54",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.2"]
+
+[project.scripts]
+mcp-ro-proxy = "mcp_ro_proxy.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+    "pytest-asyncio>=1.2",
+    "ruff>=0.14",
+    "pyright>=1.1.407",
+    "types-pyyaml>=6.0",
+    "types-jsonschema>=4.25",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF", "SIM", "PT", "C4", "PL"]
+ignore = [
+    "PLR0913", # explicit constructor arguments are clearer than option bags here
+    "PLR2004", # magic values are fine in tests and HTTP status checks
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "PLR0911", "PLR0915", "PLC0415"]
+"docs/site/build.py" = ["E501"] # embedded HTML, CSS and JS templates
+
+[tool.pyright]
+include = ["src", "tests"]
+strict = ["src"]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]

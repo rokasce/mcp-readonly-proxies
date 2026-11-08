@@ -58,7 +58,7 @@ Anthropic-enforced read-only. The Google token still holds send permission (see 
 
 ## Route B: read-only proxy or Google Gmail MCP as custom connector
 
-Credential-level read-only. Needs the proxy deployed (not built yet, see [proxy-design.md](../proxy-design.md)) or Google's Gmail MCP set up.
+Credential-level read-only. Needs the proxy deployed with a Claude OAuth connector mode (not built yet; the built proxy only has personal-key auth for nexos.ai, see [configuration.md](../configuration.md#client_auth)) or Google's Gmail MCP set up.
 
 1. **Add the custom connector:** Organization settings > Connectors > Add > Custom > Web.
    - URL: the proxy URL (e.g. `https://gmail-ro.example.com/mcp`), or for Google's server `https://gmailmcp.googleapis.com/mcp/v1` with client ID and secret under Advanced.

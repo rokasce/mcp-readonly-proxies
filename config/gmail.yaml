@@ -1,0 +1,54 @@
+# Gmail read-only proxy: one deployment, one upstream.
+# Deployment values and secrets come from the environment (see docs/configuration.md).
+
+upstream:
+  kind: native
+  name: gmail
+  provider: gmail
+
+server:
+  public_base_url: ${PUBLIC_BASE_URL}
+  mcp_path: /mcp
+  max_response_bytes: 1048576
+
+identity:
+  provider: google
+  client_id: ${GOOGLE_CLIENT_ID}
+  client_secret: ${GOOGLE_CLIENT_SECRET}
+  workspace_domain: ${GOOGLE_WORKSPACE_DOMAIN}
+
+client_auth:
+  mode: personal_key
+  api_key_headers: [x-api-key]
+  key_ttl_days: 180
+
+storage:
+  database_url: ${DATABASE_URL:-sqlite:///./data/gmail-ro.db}
+  encryption_keys: ${TOKEN_ENCRYPTION_KEYS}
+  session_secret: ${SESSION_SECRET}
+
+# Default deny: only these tools are exposed, and only while the tool definition
+# still hashes to the pinned sha256. Refresh pins with `mcp-ro-proxy pins`.
+allow:
+  - name: search_threads
+    sha256: 29033c34f9abd6b41d5bb24d33f0a8fa0e86ed75a876ac5fdbed8a145ecb7f0d
+    title: Search Gmail threads
+    annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false}
+  - name: get_thread
+    sha256: 787d5e66ad8d0e8cbff3b267f3d8f6add17fa452e5b9e09f7de0af084ea8a4e6
+    title: Read a Gmail thread
+    annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false}
+  - name: get_message
+    sha256: 2843e06b0a6e77394cf2a221e87e26c873a1691b4890a35da4fec60c2dd43a2f
+    title: Read a Gmail message
+    annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false}
+  - name: list_labels
+    sha256: 39763613cf69b9338f948ada0ab8a31bd54716379cb3bb73c8836480d1deb844
+    title: List Gmail labels
+    annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false}
+  - name: list_drafts
+    sha256: ec48f7fbf464259fa1203dc09a485ebd1583f8e6b75a346bb598d4b21e7eea28
+    title: List Gmail drafts
+    annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false}
+  # Optional: list_drafts is read-only (gmail.readonly can list drafts but never create or
+  # send them). Remove the entry above to hide drafts entirely.
