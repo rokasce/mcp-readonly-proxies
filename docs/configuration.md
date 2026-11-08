@@ -43,7 +43,7 @@ checked.
 
 | Tool | Gmail API |
 |---|---|
-| `search_threads` | `threads.list` (Gmail search syntax, up to 50 per page) |
+| `search_threads` | `threads.list` ([Gmail search syntax](https://support.google.com/mail/answer/7190), up to 50 per page) |
 | `get_thread` | `threads.get`, bodies as text; `include_bodies: false` for headers only |
 | `get_message` | `messages.get` |
 | `list_labels` | `labels.list` |
@@ -53,7 +53,7 @@ checked.
 A body comes back at most 20,000 characters at a time; a longer one says `truncated: true` and
 `next_body_offset`, which `get_message` and `get_draft` take as `body_offset` to read on.
 Attachments are listed (name, type, size); their contents are never read. A Gmail rate limit or
-brief outage (429, 5xx, or a 403 rate-limit reason) is retried up to three times in all, waiting
+brief outage (429, 5xx, or a [403 rate-limit reason](https://developers.google.com/workspace/gmail/api/guides/handle-errors#rate-limit)) is [retried](https://developers.google.com/workspace/gmail/api/guides/handle-errors#exponential-backoff) up to three times in all, waiting
 0.5 s then 1 s, or `Retry-After` when it is at most 5 s. The names match
 Gmail MCP's read-only tools, so `allow` is the same for both upstreams.
 
