@@ -1,2 +1,1 @@
-def hello() -> str:
-    return "Hello from mcp-ro-proxy!"
+"""Default-deny, allowlisting read-only MCP proxy (one deployment per upstream)."""

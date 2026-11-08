@@ -15,15 +15,16 @@ import secrets
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 import anyio.to_thread
 from sqlalchemy import (
+    BigInteger,
     Column,
     Engine,
     ForeignKey,
     Index,
-    Integer,
     MetaData,
     String,
     Table,
@@ -35,7 +36,7 @@ from sqlalchemy import (
     select,
     update,
 )
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, make_url
 
 from mcp_ro_proxy.crypto import TokenCipher
 
@@ -123,8 +124,8 @@ users = Table(
     Column("hd", String(255), nullable=False),
     Column("refresh_token_enc", Text, nullable=True),
     Column("scopes", Text, nullable=False),
-    Column("created_at", Integer, nullable=False),
-    Column("updated_at", Integer, nullable=False),
+    Column("created_at", BigInteger, nullable=False),
+    Column("updated_at", BigInteger, nullable=False),
 )
 
 api_keys = Table(
@@ -135,10 +136,10 @@ api_keys = Table(
     Column("key_hash", String(64), nullable=False, unique=True),
     Column("label", String(100), nullable=False),
     Column("hint", String(32), nullable=False),
-    Column("created_at", Integer, nullable=False),
-    Column("expires_at", Integer, nullable=True),
-    Column("last_used_at", Integer, nullable=True),
-    Column("revoked_at", Integer, nullable=True),
+    Column("created_at", BigInteger, nullable=False),
+    Column("expires_at", BigInteger, nullable=True),
+    Column("last_used_at", BigInteger, nullable=True),
+    Column("revoked_at", BigInteger, nullable=True),
     Index("ix_api_keys_user_sub", "user_sub"),
 )
 
@@ -165,8 +166,11 @@ class SqlStore:
         clock: Callable[[], float] = time.time,
     ) -> None:
         connect_args: dict[str, Any] = {}
-        if database_url.startswith("sqlite"):
+        url = make_url(database_url)
+        if url.get_backend_name() == "sqlite":
             connect_args["check_same_thread"] = False
+            if url.database and url.database != ":memory:":
+                Path(url.database).parent.mkdir(parents=True, exist_ok=True)
         self._engine: Engine = create_engine(
             database_url, connect_args=connect_args, pool_pre_ping=True
         )

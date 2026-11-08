@@ -112,6 +112,9 @@ def build_proxy(
         stateless_http=True,
         host_origin_protection=True,
         allowed_hosts=[config.server.public_host, *config.server.allowed_hosts],
+        # Explicit, because behind a TLS-terminating proxy (Cloud Run) the request scheme
+        # is http and the same-origin fallback would reject the browser's https Origin.
+        allowed_origins=[config.server.public_base_url],
         middleware=[
             Middleware(
                 SessionMiddleware,

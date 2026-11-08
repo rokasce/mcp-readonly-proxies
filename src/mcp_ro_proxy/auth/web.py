@@ -98,9 +98,12 @@ input[type=text] {
 }
 code, .secret {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px;
-  background: var(--code-bg); border-radius: 6px; padding: 2px 6px; word-break: break-all;
+  background: var(--code-bg); border-radius: 6px; padding: 2px 6px; overflow-wrap: anywhere;
 }
-.secret { display: block; padding: 10px 12px; margin: 8px 0; user-select: all; }
+code.nowrap { white-space: nowrap; }
+.secret {
+  display: block; padding: 10px 12px; margin: 8px 0; user-select: all; word-break: break-all;
+}
 dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 0; }
 dt { color: var(--muted); }
 dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
@@ -114,6 +117,8 @@ td.actions { text-align: right; white-space: nowrap; }
 footer { margin-top: 28px; font-size: 13px; }
 @media (max-width: 560px) {
   th.when, td.when { display: none; }
+  dl { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  dd { margin-bottom: 10px; }
 }
 """
 
@@ -136,6 +141,7 @@ class WebUI:
         self._title = f"{config.upstream.name.capitalize()} read-only connector"
         self._mcp_url = f"{config.server.public_base_url}{config.server.mcp_path}"
         self._is_gmail = config.upstream.kind == "native" and config.upstream.provider == "gmail"
+        self._key_headers = config.client_auth.api_key_headers
         self._footer = (
             "Read-only by design: this connector can search and read mail, and cannot send, "
             "draft, label or delete."
@@ -165,7 +171,9 @@ class WebUI:
         async def wrapped(request: Request) -> Response:
             response = await handler(request)
             response.headers["Cache-Control"] = "no-store"
-            response.headers["Referrer-Policy"] = "no-referrer"
+            # same-origin, not no-referrer: with no-referrer browsers send "Origin: null" on
+            # form posts, which the Host/Origin guard rightly refuses.
+            response.headers["Referrer-Policy"] = "same-origin"
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
             return response
@@ -415,7 +423,8 @@ class WebUI:
             "<div class='card'><h2>Use it in nexos.ai</h2><dl>"
             f"<dt>Server URL</dt><dd><code>{html.escape(self._mcp_url)}</code></dd>"
             "<dt>Authentication</dt><dd>Your personal key, sent as "
-            "<code>Authorization: Bearer &lt;key&gt;</code> or <code>X-API-Key</code></dd>"
+            "<code class='nowrap'>Authorization: Bearer &lt;key&gt;</code>"
+            f"{self._alt_headers()}</dd>"
             "</dl></div>"
             "<div class='card'><h2>Personal keys</h2>"
             "<form method='post' action='/keys' class='row'>"
@@ -423,8 +432,9 @@ class WebUI:
             "<input type='text' name='label' maxlength='100' placeholder='Label, e.g. nexos.ai' "
             "aria-label='Key label'>"
             "<button type='submit'>Create key</button></form>"
-            f"<p class='muted' style='margin-top:10px'>Anyone holding a key can read your "
-            f"mail through this connector. Revoke keys you no longer use.{ttl_text}</p>"
+            f"<p class='muted' style='margin-top:10px'>Anyone holding a key can "
+            f"{'read your mail' if self._is_gmail else 'act as you'} through this "
+            f"connector. Revoke keys you no longer use.{ttl_text}</p>"
             f"{self._key_rows(keys, csrf)}</div>"
             "<div class='card'><h2>Account</h2><div class='row'>"
             "<form class='inline' method='post' action='/logout'>"
@@ -437,6 +447,14 @@ class WebUI:
             "stored Google access, revokes it at Google and revokes all your keys.</p></div>"
         )
         return self._page(body, status=status, script=script)
+
+    def _alt_headers(self) -> str:
+        if not self._key_headers:
+            return ""
+        names = " or ".join(
+            f"<code class='nowrap'>{html.escape(h)}: &lt;key&gt;</code>" for h in self._key_headers
+        )
+        return f" or as {names}"
 
     async def keys(self, request: Request) -> Response:
         user = await self._user(request)

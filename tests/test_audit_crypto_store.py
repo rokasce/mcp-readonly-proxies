@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
+import os
 import time
 from pathlib import Path
 
 import pytest
+from sqlalchemy import create_engine, text
 
 from mcp_ro_proxy.audit import AUDIT_LOGGER_NAME, AuditLogger, JsonLineFormatter, args_sha256
 from mcp_ro_proxy.crypto import CryptoError, TokenCipher, generate_key
 from mcp_ro_proxy.store import KEY_PREFIX, SqlStore, TooManyKeysError, hash_key
+from mcp_ro_proxy.store import _metadata as store_metadata  # pyright: ignore[reportPrivateUsage]
 from mcp_ro_proxy.upstreams.base import Principal
 
 ALICE = Principal(sub="1001", email="alice@example.com", client="personal_key", credential_id="k1")
@@ -121,14 +123,29 @@ def clock() -> list[float]:
     return [1_800_000_000.0]
 
 
-@pytest.fixture
-def store(tmp_path: Path, clock: list[float]) -> SqlStore:
-    return SqlStore(
-        f"sqlite:///{tmp_path / 's.db'}", TokenCipher(generate_key("k")), clock=lambda: clock[0]
-    )
+POSTGRES_URL = os.environ.get("MCP_RO_TEST_POSTGRES_URL")
 
 
-async def test_refresh_tokens_are_encrypted_at_rest(store: SqlStore, tmp_path: Path) -> None:
+@pytest.fixture(params=["sqlite", "postgres"])
+def store(request: pytest.FixtureRequest, tmp_path: Path, clock: list[float]) -> SqlStore:
+    if request.param == "postgres":
+        if not POSTGRES_URL:
+            pytest.skip("set MCP_RO_TEST_POSTGRES_URL to run store tests on PostgreSQL")
+        engine = create_engine(POSTGRES_URL)
+        store_metadata.drop_all(engine)
+        engine.dispose()
+        url = POSTGRES_URL
+    else:
+        url = f"sqlite:///{tmp_path / 'nested' / 's.db'}"  # parent dir is created
+    return SqlStore(url, TokenCipher(generate_key("k")), clock=lambda: clock[0])
+
+
+def raw_rows(store: SqlStore, sql: str) -> list[tuple[object, ...]]:
+    with store._engine.connect() as conn:
+        return [tuple(r) for r in conn.execute(text(sql)).all()]
+
+
+async def test_refresh_tokens_are_encrypted_at_rest(store: SqlStore) -> None:
     await store.save_user(
         sub="1001",
         email="a@example.com",
@@ -136,7 +153,7 @@ async def test_refresh_tokens_are_encrypted_at_rest(store: SqlStore, tmp_path: P
         refresh_token="1//plain-refresh",
         scopes=frozenset({"openid"}),
     )
-    raw = sqlite3.connect(tmp_path / "s.db").execute("select * from users").fetchall()
+    raw = raw_rows(store, "select * from users")
     assert "1//plain-refresh" not in repr(raw)
     user = await store.get_user("1001")
     assert user is not None
@@ -153,7 +170,7 @@ async def test_refresh_tokens_are_encrypted_at_rest(store: SqlStore, tmp_path: P
     assert (await store.get_user("1001")).refresh_token == "1//plain-refresh"  # type: ignore[union-attr]
 
 
-async def test_key_lifecycle(store: SqlStore, tmp_path: Path, clock: list[float]) -> None:
+async def test_key_lifecycle(store: SqlStore, clock: list[float]) -> None:
     await store.save_user(
         sub="1001", email="a@example.com", hd="example.com", refresh_token="r", scopes=frozenset()
     )
@@ -163,7 +180,7 @@ async def test_key_lifecycle(store: SqlStore, tmp_path: Path, clock: list[float]
     assert raw.startswith(KEY_PREFIX)
     assert record.label == "nexos"
     assert raw.startswith(record.hint)
-    rows = sqlite3.connect(tmp_path / "s.db").execute("select key_hash from api_keys").fetchall()
+    rows = raw_rows(store, "select key_hash from api_keys")
     assert rows == [(hash_key(raw),)]
     assert raw not in repr(rows)
 

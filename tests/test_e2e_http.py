@@ -250,10 +250,20 @@ async def test_callback_rejects_forged_state_and_csrf(env: Env) -> None:
 async def test_web_pages_send_security_headers(env: Env) -> None:
     resp = await env.browser.get(f"{env.base}/")
     assert resp.headers["cache-control"] == "no-store"
-    assert resp.headers["referrer-policy"] == "no-referrer"
+    assert resp.headers["referrer-policy"] == "same-origin"
     assert "frame-ancestors 'none'" in resp.headers["content-security-policy"]
     assert (await env.browser.get(f"{env.base}/keys")).status_code == 303
     assert (await env.browser.get(f"{env.base}/healthz")).text == "ok"
+    # Browser form posts carry the page's Origin; foreign or opaque origins are refused.
+    await sign_in(env)
+    page = (await env.browser.get(f"{env.base}/keys")).text
+    for origin, status in (("https://evil.test", 403), ("null", 403), (env.base, 200)):
+        resp = await env.browser.post(
+            f"{env.base}/keys",
+            data={"csrf": csrf_of(page), "label": "o"},
+            headers={"Origin": origin},
+        )
+        assert resp.status_code == status, origin
     # Requests for another Host are refused (DNS-rebinding protection).
     wrong_host = await env.browser.get(f"{env.base}/healthz", headers={"Host": "evil.test"})
     assert wrong_host.status_code == 421
