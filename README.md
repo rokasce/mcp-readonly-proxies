@@ -2,7 +2,7 @@
 
 Read-only access control for MCP connectors (Gmail, Payhawk) in Claude and nexos.ai: research findings, admin runbooks and, later, allowlisting MCP proxies.
 
-> **Status:** this repo currently holds **findings and runbooks only**. The proxy code is **not built yet**. Whether and how to build it is still being decided (see [docs/open-questions.md](docs/open-questions.md)). The design in [docs/proxy-design.md](docs/proxy-design.md) is a proposal.
+> **Status:** the first proxy is now **built** in this repo: a Gmail native upstream with personal-key auth for nexos.ai (see [Read-only proxy](#read-only-proxy)). Claude OAuth connector mode, Payhawk wiring and any real deployment are still open (see [docs/open-questions.md](docs/open-questions.md)). The broader design in [docs/proxy-design.md](docs/proxy-design.md) remains a proposal.
 
 All sources were checked on **2026-11-08**.
 
@@ -55,6 +55,32 @@ On both Claude **Team** and **Enterprise**, the built-in Gmail connector can be 
 | [docs/runbooks/claude-code-managed-settings.md](docs/runbooks/claude-code-managed-settings.md) | Claude Code managed MCP allowlist / denylist, deny rules, hooks | IT, Claude Owners |
 | [docs/runbooks/nexos.md](docs/runbooks/nexos.md) | nexos.ai Owner steps | nexos Owners |
 | [docs/runbooks/payhawk.md](docs/runbooks/payhawk.md) | Payhawk MCP options, tool classification, Support request | Claude Owners, finance admins |
+| [docs/local-development.md](docs/local-development.md) | Proxy quick start, tests, trying it with Claude Code | Engineers |
+| [docs/configuration.md](docs/configuration.md) | Proxy config reference, pins, audit log | Engineers |
+| [docs/deploy.md](docs/deploy.md) | Google OAuth client, Cloud Run, Secret Manager, Cloud SQL | Engineers, Workspace admins |
+| [docs/nexos-setup.md](docs/nexos-setup.md) | Adding the proxy to nexos.ai | nexos Owners |
+| [docs/security-model.md](docs/security-model.md) | Proxy guarantees, threats, what is not verified yet | Anyone deciding |
+
+## Read-only proxy
+
+`mcp-ro-proxy` is a default-deny, allowlisting MCP proxy: one Python codebase (FastMCP),
+one YAML config and one deployment per upstream. The first upstream is Gmail, implemented
+natively on the Gmail API with each user's own Google token that holds only
+`gmail.readonly`. Users sign in with Google on the proxy's page and get a revocable
+personal key for nexos.ai custom MCP. Tools are exposed only when allowlisted and their
+definition matches a pinned hash; every call is re-checked and audited.
+
+```sh
+uv sync && uv run pytest -q
+uv run python -m tests.fakes.fake_google --port 9000      # fake Google, for local trials
+uv run mcp-ro-proxy serve --config config/examples/gmail-fake-google.yaml   # see docs
+```
+
+- [docs/local-development.md](docs/local-development.md): quick start, tests, trying it with Claude Code
+- [docs/configuration.md](docs/configuration.md): config reference, pins, audit log
+- [docs/deploy.md](docs/deploy.md): Google OAuth client, Cloud Run, Secret Manager, Cloud SQL
+- [docs/nexos-setup.md](docs/nexos-setup.md): adding the proxy to nexos.ai
+- [docs/security-model.md](docs/security-model.md): guarantees, threats, what is not verified yet
 
 ## Reading view
 
