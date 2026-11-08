@@ -91,11 +91,11 @@ class Upstream(_Strict):
     @model_validator(mode="after")
     def _kind_rules(self) -> "Upstream":
         host = self.url.host or ""
-        if self.kind == "mcp" and not (host.endswith(".googleapis.com") or host in LOOPBACK):
+        if not (host.endswith(".googleapis.com") or host in LOOPBACK):
             # Every call carries the person's Google token. Sending it to anyone but Google would
             # hand that person's mailbox to a third party.
             raise ValueError(
-                f"an mcp upstream gets the person's Google token, so it must be a "
+                f"an upstream gets the person's Google token, so it must be a "
                 f"googleapis.com server (or a local address), got {host}"
             )
         if self.pins and self.kind != "mcp":

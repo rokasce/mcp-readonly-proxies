@@ -384,6 +384,7 @@ GOOD = {
         ({"google_scopes": ["https://mail.google.com/"]}, "read-only"),
         # The person's Google token must not be sent to anyone but Google.
         ({"url": "https://mcp.payhawk.com/mcp"}, "googleapis.com"),
+        ({"kind": "gmail_api", "url": "https://gmail.example-proxy.com"}, "googleapis.com"),
         ({"pins": {"b": "0" * 64}}, "aren't allowed"),
         ({"pins": {"a": "abc"}}, "sha256"),
         (

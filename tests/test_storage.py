@@ -42,10 +42,10 @@ async def test_default_key_is_derived_from_the_secret(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(
-    not os.environ.get("MCP_GUARD_TEST_REDIS_URL"), reason="needs MCP_GUARD_TEST_REDIS_URL"
+    not os.environ.get("GUARD_TEST_REDIS_URL"), reason="needs GUARD_TEST_REDIS_URL"
 )
 async def test_redis_is_shared_between_replicas() -> None:
-    url = os.environ["MCP_GUARD_TEST_REDIS_URL"]
+    url = os.environ["GUARD_TEST_REDIS_URL"]
     first, second = build_storage(url, [NEW], "unused"), build_storage(url, [NEW], "unused")
     await first.put("1001", {"refresh_token": "1//x"}, collection="test_people", ttl=60)
     assert await second.get("1001", collection="test_people") == {"refresh_token": "1//x"}

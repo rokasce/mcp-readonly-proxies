@@ -347,13 +347,13 @@ async def test_personal_keys_off_by_default(serve: Serve, google: Google) -> Non
 
 
 @pytest.mark.skipif(
-    not os.environ.get("MCP_GUARD_TEST_REDIS_URL"), reason="needs MCP_GUARD_TEST_REDIS_URL"
+    not os.environ.get("GUARD_TEST_REDIS_URL"), reason="needs GUARD_TEST_REDIS_URL"
 )
 async def test_sign_ins_work_on_every_replica(serve: Serve, google: Google) -> None:
     """Two replicas behind one public URL, sharing Redis: a person signs in on one and is served by
     the other, with an OAuth token and with a personal key."""
     env = {
-        "MCP_GUARD_STORAGE_URL": os.environ["MCP_GUARD_TEST_REDIS_URL"],
+        "MCP_GUARD_STORAGE_URL": os.environ["GUARD_TEST_REDIS_URL"],
         "MCP_GUARD_STORAGE_ENCRYPTION_KEYS": "4j0xKqTt0bHq7oG1QeYyF6O8jx1oI5yX9Zl1p2nQf2w=",
         "MCP_GUARD_PERSONAL_KEYS": "true",
     }

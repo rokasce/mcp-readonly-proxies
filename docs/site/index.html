@@ -1387,7 +1387,7 @@ uv run ruff check . &amp;&amp; uv run ruff format --check . &amp;&amp; uv run py
 </code></pre>
 <p>Two more tests (shared storage, a sign-in used across replicas) run when a Redis is available:</p>
 <pre><code class="language-bash">docker run -d --rm -p 6390:6379 redis:7-alpine
-MCP_GUARD_TEST_REDIS_URL=redis://127.0.0.1:6390/0 uv run pytest -q
+GUARD_TEST_REDIS_URL=redis://127.0.0.1:6390/0 uv run pytest -q
 </code></pre>
 <div class="table-wrap"><table>
 <thead>
@@ -1491,7 +1491,7 @@ asyncio.run(main(&quot;mcpg_...&quot;))
 </tr>
 <tr>
 <td><code>url</code></td>
-<td>https (or a local address, for tests). <code>mcp</code> needs a <code>*.googleapis.com</code> host, since calls carry the person's Google token</td>
+<td>https (or a local address, for tests). Both kinds need a <code>*.googleapis.com</code> host, since calls carry the person's Google token</td>
 </tr>
 <tr>
 <td><code>google_scopes</code></td>

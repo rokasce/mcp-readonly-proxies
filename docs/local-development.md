@@ -15,7 +15,7 @@ Two more tests (shared storage, a sign-in used across replicas) run when a Redis
 
 ```bash
 docker run -d --rm -p 6390:6379 redis:7-alpine
-MCP_GUARD_TEST_REDIS_URL=redis://127.0.0.1:6390/0 uv run pytest -q
+GUARD_TEST_REDIS_URL=redis://127.0.0.1:6390/0 uv run pytest -q
 ```
 
 | Test file | Covers |

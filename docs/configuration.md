@@ -26,7 +26,7 @@ The repo's `guard.yaml` defines `gmail` (the default, `kind: gmail_api`) and
 | Key | Meaning |
 |---|---|
 | `kind` | `gmail_api` (the guard's own tools on the Gmail REST API) or `mcp` (an MCP server) |
-| `url` | https (or a local address, for tests). `mcp` needs a `*.googleapis.com` host, since calls carry the person's Google token |
+| `url` | https (or a local address, for tests). Both kinds need a `*.googleapis.com` host, since calls carry the person's Google token |
 | `google_scopes` | Asked for at sign-in, next to `openid` and `userinfo.email`. Only `.readonly` scopes are accepted. A token holding more is refused, and revoked if the guard obtained it |
 | `allow` | Exact tool names agents may list and call. Others are hidden and refused ("Unknown tool") |
 | `pins` | Optional, `mcp` only. See [Pins](#pins) |
