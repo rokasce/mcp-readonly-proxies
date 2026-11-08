@@ -111,7 +111,13 @@ async def test_claude_code_style_sign_in_and_calls(gmail: Deployment) -> None:
         "get_draft",
         "list_labels",
     }
-    assert {lb["name"] for lb in labels["labels"]} == {"INBOX", "Invoices"}
+    assert {lb["name"] for lb in labels["labels"]} == {
+        "INBOX",
+        "SENT",
+        "UNREAD",
+        "DRAFT",
+        "Invoices",
+    }
     assert auth.pages == ["consent"]
     [google_request] = gmail.google.fake.authorize_requests
     assert set(google_request["scope"].split()) == {

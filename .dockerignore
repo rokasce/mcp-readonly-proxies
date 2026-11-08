@@ -4,6 +4,5 @@
 .ruff_cache
 .claude
 data
-tests
 docs
 **/__pycache__

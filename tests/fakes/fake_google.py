@@ -361,6 +361,9 @@ class FakeGoogle:
         if parts == ["labels"]:
             labels = [
                 {"id": "INBOX", "name": "INBOX", "type": "system"},
+                {"id": "SENT", "name": "SENT", "type": "system"},
+                {"id": "UNREAD", "name": "UNREAD", "type": "system"},
+                {"id": "DRAFT", "name": "DRAFT", "type": "system"},
                 {"id": "Label_1", "name": "Invoices", "type": "user"},
             ]
             return JSONResponse({"labels": labels})

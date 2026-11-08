@@ -71,7 +71,13 @@ async def test_get_thread_and_message_bodies(client: Client[Any]) -> None:
 
 async def test_labels_and_drafts(client: Client[Any]) -> None:
     labels = await call(client, "list_labels")
-    assert {lb["name"] for lb in labels["labels"]} == {"INBOX", "Invoices"}
+    assert {lb["name"] for lb in labels["labels"]} == {
+        "INBOX",
+        "SENT",
+        "UNREAD",
+        "DRAFT",
+        "Invoices",
+    }
     drafts = await call(client, "list_drafts")
     assert drafts["drafts"][0] == {
         "id": "d1",

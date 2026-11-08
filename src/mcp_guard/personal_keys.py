@@ -269,7 +269,8 @@ through this server, read-only. Claude signs in by itself and doesn't need one.<
 <dl>
   <dt>MCP server URL</dt><dd><code>{html.escape(self._base_url)}/mcp</code></dd>
   <dt>Send it as</dt>
-  <dd><code>Authorization: Bearer &lt;key&gt;</code> or <code>X-API-Key: &lt;key&gt;</code></dd>
+  <dd><code class="nowrap">Authorization: Bearer &lt;key&gt;</code> or<br>
+    <code class="nowrap">X-API-Key: &lt;key&gt;</code></dd>
   <dt>Valid until</dt><dd>{until}, or until you revoke it or make a new one</dd>
 </dl>
 <p><a href="/keys">Back</a></p>""",
@@ -321,6 +322,7 @@ p { margin:0 0 14px; }
 .notice.warn { background:var(--warn); border-color:var(--warn-line); }
 code { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:13px;
   background:var(--code); border-radius:6px; padding:2px 6px; overflow-wrap:anywhere; }
+code.nowrap { white-space:nowrap; }
 code.secret { display:block; padding:10px 12px; margin:0 0 14px; user-select:all; }
 dl { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:6px 14px; margin:0 0 14px; }
 dt { color:var(--muted); } dd { margin:0; min-width:0; }
