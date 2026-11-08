@@ -91,7 +91,7 @@ sequenceDiagram
 - **Pins (optional, `mcp` only):** a pinned tool whose definition hash (name, description, input schema) changes is dropped, with one warning. Our own Gmail API tools need no pins.
 - **Scope floor:** `google_scopes` must be `.readonly`, and each Google token must hold exactly those plus sign-in scopes. A broader token is revoked and refused.
 - **Annotations** never decide anything. **Resources and prompts** are never offered.
-- **Limits:** results capped at 1 MB (Gmail bodies at 20,000 characters); a per-person rate limit.
+- **Limits:** results capped at 1 MB (Gmail bodies returned 20,000 characters at a time, attachment contents never read); a per-person rate limit; Gmail rate limits retried briefly.
 - **Not built:** argument checks (every allowed tool is read-only whatever its arguments) and prompt-injection screening of results.
 
 ## Logging and audit

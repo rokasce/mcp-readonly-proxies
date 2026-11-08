@@ -46,7 +46,7 @@ read-only?**
 
 ## Questions, by who can answer
 
-The four that change the plan most: **1**, **6**, **10** and **16**.
+The four that change the plan most: **1**, **6**, **10** and **17**.
 
 ### Leadership / security
 
@@ -71,14 +71,19 @@ The four that change the plan most: **1**, **6**, **10** and **16**.
 10. Will you **block "Claude for Gmail"** and nexos.ai's Gmail app at Google, and allow the guard's OAuth client for read-only Gmail ("Specific Google data")? Can we pilot with one group first?
 11. Who creates and owns the **Google Cloud project and Internal OAuth client** for the guard?
 12. Do we have more than one Workspace domain? The guard accepts one, matched against the account's Workspace domain (`hd`).
+13. Should the guard's OAuth client be created with **Use this client for an AI-powered agent**
+    ticked? The default Gmail API mode doesn't need it, but Google's Gmail MCP does, and it labels
+    agent traffic for admin controls. A third-party project says the setting can't be changed on an
+    existing client after **November 12, 2026** (Google's docs give no date); if so, switching to
+    Gmail MCP later means a new client.
 
 ### nexos.ai admins
 
-13. Which nexos plan, and who is the nexos Owner?
-14. Can the built-in Gmail integration be switched off once the guard is live?
-15. Ask nexos: does custom MCP support **OAuth** (then personal keys could go), which **header** carries the API key, what are their **egress IPs**, and does a key entered when adding the server become a **default for members** who haven't added their own?
+14. Which nexos plan, and who is the nexos Owner?
+15. Can the built-in Gmail integration be switched off once the guard is live?
+16. Ask nexos: does custom MCP support **OAuth** (then personal keys could go), which **header** carries the API key, what are their **egress IPs**, and does a key entered when adding the server become a **default for members** who haven't added their own?
 
 ### Payhawk owners / finance
 
-16. Is Payhawk needed in **nexos**, or only in **Claude**? (Only Claude: no proxy needed.)
-17. If nexos needs it: will someone ask Payhawk Support to allow our proxy's sign-in address, or is a shared read-only API key acceptable?
+17. Is Payhawk needed in **nexos**, or only in **Claude**? (Only Claude: no proxy needed.)
+18. If nexos needs it: will someone ask Payhawk Support to allow our proxy's sign-in address, or is a shared read-only API key acceptable?

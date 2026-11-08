@@ -3,7 +3,8 @@
 Every request is a GET made with the signed-in person's own Google token, which holds only
 `gmail.readonly`, so Google itself refuses any change even if this code had a bug. Ids are
 checked before they go into a URL path. The tool names match Google's Gmail MCP server, so an
-allowlist works the same with either upstream.
+allowlist works the same with either upstream. Attachments are listed by name, type and size;
+their contents are never fetched.
 """
 
 import asyncio
@@ -26,11 +27,21 @@ from pydantic import Field
 _ID = Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")
 _LIST_HEADERS = ("Subject", "From", "To", "Date")
 _MESSAGE_HEADERS = ("subject", "from", "to", "cc", "date")
-# Longest a message body may be, whatever the agent asks for; the response size cap is separate.
+# Most body text one call returns, whatever the agent asks for; a longer body is read on with
+# body_offset. The response size cap is separate.
 MAX_BODY_CHARS = 20_000
 # Parallel Gmail requests per tool call (search and list_drafts fetch each result).
 MAX_CONCURRENCY = 8
 TIMEOUT_S = 30
+# Gmail answers these when it is rate limiting or briefly unavailable (rate limits also come as a
+# 403 with one of RATE_LIMIT_REASONS); such a request is tried again, up to MAX_ATTEMPTS in all,
+# waiting RETRY_BASE_S, then twice that. A Retry-After longer than MAX_RETRY_WAIT_S isn't waited
+# out: the agent gets the error at once.
+RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+RATE_LIMIT_REASONS = frozenset({"rateLimitExceeded", "userRateLimitExceeded"})
+MAX_ATTEMPTS = 3
+RETRY_BASE_S = 0.5
+MAX_RETRY_WAIT_S = 5.0
 READ_ONLY = ToolAnnotations(
     read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False
 )
@@ -101,8 +112,9 @@ def _headers(payload: dict[str, Any], wanted: Sequence[str]) -> dict[str, str]:
     return found
 
 
-def extract_body(payload: dict[str, Any], max_chars: int) -> dict[str, Any]:
-    """The message's text: its text/plain parts, or else its HTML turned into text."""
+def extract_body(payload: dict[str, Any], max_chars: int, offset: int = 0) -> dict[str, Any]:
+    """The message's text (its text/plain parts, or else its HTML turned into text), from
+    `offset`, at most `max_chars` of it. A cut body says where the next part starts."""
     plain: list[str] = []
     markup: list[str] = []
     for part in _walk(payload):
@@ -119,7 +131,18 @@ def extract_body(payload: dict[str, Any], max_chars: int) -> dict[str, Any]:
         text, source = html_to_text("\n".join(markup)), "text/html"
     else:
         text, source = "", None
-    return {"text": text[:max_chars], "source": source, "truncated": len(text) > max_chars}
+    end = min(offset + max_chars, len(text))
+    body: dict[str, Any] = {
+        "text": text[offset:end],
+        "source": source,
+        "truncated": end < len(text),
+    }
+    if offset:
+        body["offset"] = offset
+    if end < len(text):
+        body["next_body_offset"] = end
+        body["total_chars"] = len(text)
+    return body
 
 
 def attachments(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -137,7 +160,9 @@ def attachments(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return found
 
 
-def summarize_message(message: dict[str, Any], *, body: bool, max_chars: int) -> dict[str, Any]:
+def summarize_message(
+    message: dict[str, Any], *, body: bool, max_chars: int, offset: int = 0
+) -> dict[str, Any]:
     payload = cast(dict[str, Any], message.get("payload") or {})
     out: dict[str, Any] = {
         "id": message.get("id"),
@@ -148,7 +173,7 @@ def summarize_message(message: dict[str, Any], *, body: bool, max_chars: int) ->
         "attachments": attachments(payload),
     }
     if body:
-        out["body"] = extract_body(payload, max_chars)
+        out["body"] = extract_body(payload, max_chars, offset)
     return out
 
 
@@ -169,17 +194,16 @@ class GmailApi:
         token = get_access_token()
         if token is None:
             raise ToolError("Not signed in.")
-        try:
-            async with self._limit:
-                response = await self._http.get(
-                    f"{self._base}/{path}",
-                    params=list(params),
-                    headers={"Authorization": f"Bearer {token.token}"},
-                )
-        except httpx2.HTTPError:
-            raise ToolError("Couldn't reach the Gmail API. Try again later.") from None
+        attempt = 0
+        response = await self._send(path, params, token.token)
+        while (wait := _retry_wait(response, attempt)) is not None:
+            await asyncio.sleep(wait)
+            attempt += 1
+            response = await self._send(path, params, token.token)
         if response.status_code == 200:
             return cast(dict[str, Any], response.json())
+        if _rate_limited(response):
+            raise ToolError("Gmail's rate limit was reached; try again shortly.")
         raise ToolError(
             {
                 401: "Gmail refused the stored Google access; sign in again.",
@@ -192,6 +216,19 @@ class GmailApi:
             )
         )
 
+    async def _send(
+        self, path: str, params: Sequence[tuple[str, str]], token: str
+    ) -> httpx2.Response:
+        try:
+            async with self._limit:
+                return await self._http.get(
+                    f"{self._base}/{path}",
+                    params=list(params),
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+        except httpx2.HTTPError:
+            raise ToolError("Couldn't reach the Gmail API. Try again later.") from None
+
     async def gather(
         self, calls: Iterable[Coroutine[Any, Any, dict[str, Any]]]
     ) -> list[dict[str, Any]]:
@@ -202,6 +239,31 @@ class GmailApi:
         except ExceptionGroup as eg:
             raise eg.exceptions[0] from None
         return [t.result() for t in tasks]
+
+
+def _rate_limited(response: httpx2.Response) -> bool:
+    if response.status_code == 429:
+        return True
+    if response.status_code != 403:
+        return False
+    try:
+        error = cast(dict[str, Any], cast(dict[str, Any], response.json()).get("error") or {})
+    except ValueError:
+        return False
+    reasons = {str(e.get("reason")) for e in cast(list[dict[str, Any]], error.get("errors") or [])}
+    return bool(reasons & RATE_LIMIT_REASONS)
+
+
+def _retry_wait(response: httpx2.Response, attempt: int) -> float | None:
+    """Seconds to wait before trying `response`'s request again, or None to keep the response."""
+    retryable = response.status_code in RETRY_STATUSES or _rate_limited(response)
+    if not retryable or attempt + 1 >= MAX_ATTEMPTS:
+        return None
+    wait = RETRY_BASE_S * 2**attempt
+    retry_after = response.headers.get("retry-after", "")
+    if retry_after.isdigit():
+        wait = max(wait, float(retry_after))
+    return wait if wait <= MAX_RETRY_WAIT_S else None
 
 
 def _id(value: str) -> str:
@@ -288,11 +350,16 @@ def add_gmail_tools(server: FastMCP[Any], base_url: str) -> None:  # noqa: PLR09
             bool, Field(description="Include each message's text body (false: headers only).")
         ] = True,
         max_body_chars: Annotated[
-            int | None, Field(ge=1, description="Cut each body to this many characters.")
+            int | None,
+            Field(
+                ge=1,
+                description="Cut each body to this many characters. A cut body has "
+                "next_body_offset; read on with get_message.",
+            ),
         ] = None,
     ) -> dict[str, Any]:
         """Return every message in a Gmail thread with headers, labels, attachment names and the
-        text body. Read-only."""
+        text body. Attachment contents aren't available. Read-only."""
         params: list[tuple[str, str]] = [("format", "full" if include_bodies else "metadata")]
         if not include_bodies:
             params.extend(("metadataHeaders", h) for h in _MESSAGE_HEADERS)
@@ -313,12 +380,22 @@ def add_gmail_tools(server: FastMCP[Any], base_url: str) -> None:  # noqa: PLR09
         max_body_chars: Annotated[
             int | None, Field(ge=1, description="Cut the body to this many characters.")
         ] = None,
+        body_offset: Annotated[
+            int,
+            Field(
+                ge=0,
+                description="Where in the body text to start: next_body_offset from a "
+                "previous call, to read a long body on.",
+            ),
+        ] = 0,
     ) -> dict[str, Any]:
         """Return one Gmail message with headers, labels, attachment names and the text body.
-        Read-only."""
+        Attachment contents aren't available. Read-only."""
         async with client() as http:
             message = await api(http).get(f"messages/{_id(message_id)}", [("format", "full")])
-        return summarize_message(message, body=True, max_chars=_body_limit(max_body_chars))
+        return summarize_message(
+            message, body=True, max_chars=_body_limit(max_body_chars), offset=body_offset
+        )
 
     @server.tool(title="List Gmail labels", annotations=READ_ONLY)
     async def list_labels() -> dict[str, Any]:
@@ -373,6 +450,14 @@ def add_gmail_tools(server: FastMCP[Any], base_url: str) -> None:  # noqa: PLR09
         max_body_chars: Annotated[
             int | None, Field(ge=1, description="Cut the body to this many characters.")
         ] = None,
+        body_offset: Annotated[
+            int,
+            Field(
+                ge=0,
+                description="Where in the body text to start: next_body_offset from a "
+                "previous call, to read a long body on.",
+            ),
+        ] = 0,
     ) -> dict[str, Any]:
         """Return one Gmail draft with recipients, subject and text body. Read-only: drafts can't
         be created, changed or sent."""
@@ -381,7 +466,9 @@ def add_gmail_tools(server: FastMCP[Any], base_url: str) -> None:  # noqa: PLR09
         message = cast(dict[str, Any], draft.get("message") or {})
         return {
             "id": draft.get("id"),
-            "message": summarize_message(message, body=True, max_chars=_body_limit(max_body_chars)),
+            "message": summarize_message(
+                message, body=True, max_chars=_body_limit(max_body_chars), offset=body_offset
+            ),
         }
 
     del search_threads, get_thread, get_message, list_labels, list_drafts, get_draft

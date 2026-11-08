@@ -17,7 +17,9 @@ one, gateway or not. Someone with Google Cloud access in the example.com organis
 2. **OAuth consent screen, user type Internal** (Google Auth Platform > Audience). Only example.com
    accounts can sign in, and the restricted `gmail.readonly` scope needs no Google verification.
 3. **OAuth client ID, type Web application**, with redirect URIs `https://<guard>/auth/callback`
-   and, if personal keys are on, `https://<guard>/keys/callback`. No JavaScript origins.
+   and, if personal keys are on, `https://<guard>/keys/callback`. No JavaScript origins. Decide
+   on **Use this client for an AI-powered agent** when creating it
+   ([questions.md](docs/questions.md), question 13).
 4. **Gmail API enabled** (`gmail.googleapis.com`). Gmail MCP also needs `gmailmcp.googleapis.com`
    enabled and the client marked **Use this client for an AI-powered agent**
    ([README](README.md#gmail-api-or-gmail-mcp)).

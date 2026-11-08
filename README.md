@@ -18,6 +18,8 @@ Claude / nexos.ai  --MCP-->  MCP Guard  --person's gmail.readonly token-->  Gmai
   (`gmail.modify`, `https://mail.google.com/`, ...) is refused and revoked, so Google refuses
   changes even if a tool were allowed by mistake.
 - **One company.** Only verified accounts of the company's Workspace domain get through.
+- **No attachments.** The guard lists each attachment's name, type and size, but never reads
+  its contents. A long body is returned in parts (`body_offset`), 20,000 characters at a time.
 - **Audit.** One JSON line per tool call: who, which tool, allowed or not, outcome, duration.
   Arguments and mail are never logged.
 - **Allowed tools:** `search_threads`, `get_thread`, `get_message`, `list_drafts`, `get_draft`,

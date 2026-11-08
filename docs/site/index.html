@@ -119,6 +119,8 @@ Agents connect to the guard instead of Gmail and see only the read-only tools al
   (<code>gmail.modify</code>, <code>https://mail.google.com/</code>, ...) is refused and revoked, so Google refuses
   changes even if a tool were allowed by mistake.</li>
 <li><strong>One company.</strong> Only verified accounts of the company's Workspace domain get through.</li>
+<li><strong>No attachments.</strong> The guard lists each attachment's name, type and size, but never reads
+  its contents. A long body is returned in parts (<code>body_offset</code>), 20,000 characters at a time.</li>
 <li><strong>Audit.</strong> One JSON line per tool call: who, which tool, allowed or not, outcome, duration.
   Arguments and mail are never logged.</li>
 <li><strong>Allowed tools:</strong> <code>search_threads</code>, <code>get_thread</code>, <code>get_message</code>, <code>list_drafts</code>, <code>get_draft</code>,
@@ -922,7 +924,7 @@ docker build -t mcp-guard .  # runs the tests in its test stage
 <li><strong>Pins (optional, <code>mcp</code> only):</strong> a pinned tool whose definition hash (name, description, input schema) changes is dropped, with one warning. Our own Gmail API tools need no pins.</li>
 <li><strong>Scope floor:</strong> <code>google_scopes</code> must be <code>.readonly</code>, and each Google token must hold exactly those plus sign-in scopes. A broader token is revoked and refused.</li>
 <li><strong>Annotations</strong> never decide anything. <strong>Resources and prompts</strong> are never offered.</li>
-<li><strong>Limits:</strong> results capped at 1 MB (Gmail bodies at 20,000 characters); a per-person rate limit.</li>
+<li><strong>Limits:</strong> results capped at 1 MB (Gmail bodies returned 20,000 characters at a time, attachment contents never read); a per-person rate limit; Gmail rate limits retried briefly.</li>
 <li><strong>Not built:</strong> argument checks (every allowed tool is read-only whatever its arguments) and prompt-injection screening of results.</li>
 </ul>
 <h2 id="proxy-design--logging-and-audit">Logging and audit</h2>
@@ -1554,7 +1556,11 @@ checked.</p>
 </tr>
 </tbody>
 </table></div>
-<p>Bodies are cut at 20,000 characters; attachments are listed, never fetched. The names match
+<p>A body comes back at most 20,000 characters at a time; a longer one says <code>truncated: true</code> and
+<code>next_body_offset</code>, which <code>get_message</code> and <code>get_draft</code> take as <code>body_offset</code> to read on.
+Attachments are listed (name, type, size); their contents are never read. A Gmail rate limit or
+brief outage (429, 5xx, or a 403 rate-limit reason) is retried up to three times in all, waiting
+0.5 s then 1 s, or <code>Retry-After</code> when it is at most 5 s. The names match
 Gmail MCP's read-only tools, so <code>allow</code> is the same for both upstreams.</p>
 <h3 id="configuration--pins">Pins</h3>
 <p>A pin is the sha256 of a tool's name, description and input schema. If an <code>mcp</code> upstream changes
@@ -1621,7 +1627,9 @@ one, gateway or not. Someone with Google Cloud access in the example.com organis
 <li><strong>OAuth consent screen, user type Internal</strong> (Google Auth Platform &gt; Audience). Only example.com
    accounts can sign in, and the restricted <code>gmail.readonly</code> scope needs no Google verification.</li>
 <li><strong>OAuth client ID, type Web application</strong>, with redirect URIs <code>https://&lt;guard&gt;/auth/callback</code>
-   and, if personal keys are on, <code>https://&lt;guard&gt;/keys/callback</code>. No JavaScript origins.</li>
+   and, if personal keys are on, <code>https://&lt;guard&gt;/keys/callback</code>. No JavaScript origins. Decide
+   on <strong>Use this client for an AI-powered agent</strong> when creating it
+   (<a href="#questions">questions.md</a>, question 13).</li>
 <li><strong>Gmail API enabled</strong> (<code>gmail.googleapis.com</code>). Gmail MCP also needs <code>gmailmcp.googleapis.com</code>
    enabled and the client marked <strong>Use this client for an AI-powered agent</strong>
    (<a href="#readme--gmail-api-or-gmail-mcp">README</a>).</li>
@@ -1824,6 +1832,11 @@ curl https://&lt;guard&gt;/.well-known/oauth-protected-resource/mcp   # scopes: 
 <p>nexos.ai can only turn whole integrations on or off, not single tools. So read-only Gmail in nexos
 means: built-in Gmail <strong>off</strong>, and the guard added as a <strong>custom MCP</strong>, with each user's own
 personal key. Background: <a href="#findings">findings.md</a>.</p>
+<p><strong>Why personal keys:</strong> nexos's custom MCP authenticates each user with their own API key ("Each
+user will be able to provide their own API key individually once the server is connected",
+<a href="https://docs.nexos.ai/workspace/integrations/custom-mcp.md" target="_blank" rel="noopener">nexos docs</a>); it documents no OAuth
+sign-in. A personal key is that API key: the guard issues it to one person, and it reads only that
+person's mailbox. Not yet tried against real nexos (see <a href="#nexos-setup--not-verified-yet">Not verified yet</a>).</p>
 <p><strong>Before you start:</strong> the guard is deployed with <code>MCP_GUARD_PERSONAL_KEYS=true</code> at
 <code>https://gmail-guard.example.com</code>, and <code>https://gmail-guard.example.com/keys/callback</code> is in the
 Google OAuth client's redirect URIs (<a href="#deploy">DEPLOY.md</a>). The same deployment keeps serving
@@ -1864,7 +1877,7 @@ We don't know which header nexos sends the key in, so the guard accepts both
 <h2 id="nexos-setup--what-users-get">What users get</h2>
 <p>Six read-only tools: <code>search_threads</code>, <code>get_thread</code>, <code>get_message</code>, <code>list_labels</code>, <code>list_drafts</code>
 and <code>get_draft</code>. Nothing can send, draft, label, archive or delete, and the Google token behind
-them can't either.</p>
+them can't either. Attachments show up by name, type and size only; their contents can't be read.</p>
 <h2 id="nexos-setup--revoking-access">Revoking access</h2>
 <ul>
 <li><strong>One key:</strong> the user chooses <strong>Sign in and revoke my key</strong> on the keys page. The key fails with
@@ -2013,7 +2026,7 @@ refused the same way but not revoked, since it's the person's own.</p>
 </tr>
 <tr>
 <td>Oversized responses</td>
-<td>Results cut at 1 MB, bodies at 20,000 characters</td>
+<td>Results cut at 1 MB; bodies returned 20,000 characters at a time; attachment contents never read</td>
 </tr>
 <tr>
 <td>Mail leaking into logs</td>
@@ -2100,7 +2113,7 @@ read-only?</strong></p>
 <li><strong>Recommended:</strong> keep 180 days for the pilot; revisit after.</li>
 </ul>
 <h2 id="questions--questions-by-who-can-answer">Questions, by who can answer</h2>
-<p>The four that change the plan most: <strong>1</strong>, <strong>6</strong>, <strong>10</strong> and <strong>16</strong>.</p>
+<p>The four that change the plan most: <strong>1</strong>, <strong>6</strong>, <strong>10</strong> and <strong>17</strong>.</p>
 <h3 id="questions--leadership--security">Leadership / security</h3>
 <ol>
 <li>Which of D1-D5 above do you agree with? Who signs off?</li>
@@ -2124,15 +2137,20 @@ read-only?</strong></p>
 <li>Will you <strong>block "Claude for Gmail"</strong> and nexos.ai's Gmail app at Google, and allow the guard's OAuth client for read-only Gmail ("Specific Google data")? Can we pilot with one group first?</li>
 <li>Who creates and owns the <strong>Google Cloud project and Internal OAuth client</strong> for the guard?</li>
 <li>Do we have more than one Workspace domain? The guard accepts one, matched against the account's Workspace domain (<code>hd</code>).</li>
+<li>Should the guard's OAuth client be created with <strong>Use this client for an AI-powered agent</strong>
+    ticked? The default Gmail API mode doesn't need it, but Google's Gmail MCP does, and it labels
+    agent traffic for admin controls. A third-party project says the setting can't be changed on an
+    existing client after <strong>November 12, 2026</strong> (Google's docs give no date); if so, switching to
+    Gmail MCP later means a new client.</li>
 </ol>
 <h3 id="questions--nexosai-admins">nexos.ai admins</h3>
-<ol start="13">
+<ol start="14">
 <li>Which nexos plan, and who is the nexos Owner?</li>
 <li>Can the built-in Gmail integration be switched off once the guard is live?</li>
 <li>Ask nexos: does custom MCP support <strong>OAuth</strong> (then personal keys could go), which <strong>header</strong> carries the API key, what are their <strong>egress IPs</strong>, and does a key entered when adding the server become a <strong>default for members</strong> who haven't added their own?</li>
 </ol>
 <h3 id="questions--payhawk-owners--finance">Payhawk owners / finance</h3>
-<ol start="16">
+<ol start="17">
 <li>Is Payhawk needed in <strong>nexos</strong>, or only in <strong>Claude</strong>? (Only Claude: no proxy needed.)</li>
 <li>If nexos needs it: will someone ask Payhawk Support to allow our proxy's sign-in address, or is a shared read-only API key acceptable?</li>
 </ol></section>

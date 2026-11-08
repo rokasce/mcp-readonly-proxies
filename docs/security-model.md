@@ -45,7 +45,7 @@ refused the same way but not revoked, since it's the person's own.
 | Login CSRF on `/keys` | PKCE, plus a 10-minute `state` tied to the browser by an HttpOnly cookie |
 | DNS rebinding on a local `--dev` guard | Host and Origin checked on localhost (421 otherwise) |
 | One agent using up the shared Gmail quota | Per-person rate limit (2/s, bursts of 20) |
-| Oversized responses | Results cut at 1 MB, bodies at 20,000 characters |
+| Oversized responses | Results cut at 1 MB; bodies returned 20,000 characters at a time; attachment contents never read |
 | Mail leaking into logs | The [audit line](configuration.md#audit-log) never holds arguments, results or tokens |
 
 ## Not covered

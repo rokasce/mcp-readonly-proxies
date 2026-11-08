@@ -4,6 +4,12 @@ nexos.ai can only turn whole integrations on or off, not single tools. So read-o
 means: built-in Gmail **off**, and the guard added as a **custom MCP**, with each user's own
 personal key. Background: [findings.md](findings.md).
 
+**Why personal keys:** nexos's custom MCP authenticates each user with their own API key ("Each
+user will be able to provide their own API key individually once the server is connected",
+[nexos docs](https://docs.nexos.ai/workspace/integrations/custom-mcp.md)); it documents no OAuth
+sign-in. A personal key is that API key: the guard issues it to one person, and it reads only that
+person's mailbox. Not yet tried against real nexos (see [Not verified yet](#not-verified-yet)).
+
 **Before you start:** the guard is deployed with `MCP_GUARD_PERSONAL_KEYS=true` at
 `https://gmail-guard.example.com`, and `https://gmail-guard.example.com/keys/callback` is in the
 Google OAuth client's redirect URIs ([DEPLOY.md](../DEPLOY.md)). The same deployment keeps serving
@@ -48,7 +54,7 @@ We don't know which header nexos sends the key in, so the guard accepts both
 
 Six read-only tools: `search_threads`, `get_thread`, `get_message`, `list_labels`, `list_drafts`
 and `get_draft`. Nothing can send, draft, label, archive or delete, and the Google token behind
-them can't either.
+them can't either. Attachments show up by name, type and size only; their contents can't be read.
 
 ## Revoking access
 
