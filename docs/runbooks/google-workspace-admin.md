@@ -2,6 +2,8 @@
 
 For the Google Workspace admins. This lists every step in the read-only Gmail plan that needs Google Workspace admin access. Background and reasoning: [findings.md](../findings.md). Sources checked on 2026-11-08.
 
+> **Screenshots:** the images below are from Google's public help pages, including Google's own illustration of where API controls sit in the Admin console. We have no Admin console access, so there are no screenshots of the real console screens (Accessed apps, an app's access settings, Gmail service access); those steps are text only.
+
 ## Why we are asking
 
 We want AI assistants (Claude, nexos.ai) to **read** Gmail but never send, draft, label or delete. Anthropic's built-in "Claude for Gmail" app asks Google for send permission (`gmail.compose`), so the only way to make read-only a property of the **credential** is for Google to hand out tokens that hold only `gmail.readonly`. A token holding only `gmail.readonly` (plus `openid email`) cannot send, draft, label or delete, and Google enforces this regardless of the client ([Gmail API scopes](https://developers.google.com/workspace/gmail/api/auth/scopes)).
@@ -16,6 +18,10 @@ We want AI assistants (Claude, nexos.ai) to **read** Gmail but never send, draft
 
 Admin console > Security > Access and data control > **API controls** > Manage App Access (also shown as Manage Third-Party App Access).
 
+![Where API controls live in the Admin console (Google's own illustration)](../images/google-api-controls-nav.png)
+
+*Source: [Google Workspace Admin Help, Control which apps access Google Workspace data](https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data), captured 2026-11-08. Yellow highlight added.*
+
 Per-app access levels (settings can differ per organizational unit):
 
 | Level | Meaning |
@@ -24,6 +30,10 @@ Per-app access levels (settings can differ per organizational unit):
 | Limited | Unrestricted services only |
 | **Specific Google data** | "Can request data access only to scopes that you specify". You must include the Sign-in scopes. "If a configured app tries to access a Google service it doesn't have permission for, the user is blocked." |
 | **Blocked** | No Google data |
+
+![Per-app access levels, including Specific Google data and Blocked](../images/google-app-access-levels.png)
+
+*Source: [Google Workspace Admin Help, Control which apps access Google Workspace data](https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data), captured 2026-11-08. Yellow highlight added.*
 
 ## Steps
 
@@ -59,6 +69,11 @@ This client lives in a GCP project owned by the Workspace org, with an **Interna
 - **Unconfigured third-party apps:** allow all (default), allow only basic Sign-in-with-Google apps, or don't allow any. Consider basic sign-in only or none.
 - **"Trust internal apps":** leave it **unchecked**, so only explicitly configured clients reach Gmail.
 - **Gmail service = Restricted:** only Trusted or Specific Google data apps can then access Gmail. Large blast radius: "If you change access to Restricted, any previously installed apps that you haven't trusted stop working, and tokens are revoked." Announce and coordinate first.
+
+![Setting a service to Restricted revokes tokens of untrusted apps](../images/google-restricted-services.png)
+
+*Source: [Google Workspace Admin Help, Control which apps access Google Workspace data](https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data), captured 2026-11-08. Yellow highlight added.*
+
 - **High-risk Gmail scopes** can be restricted separately. The list includes `gmail.compose`, `gmail.send`, `gmail.modify`, `gmail.readonly` and `mail.google.com`.
 
 ### 6. Only if chosen: domain-wide delegation (super admin)

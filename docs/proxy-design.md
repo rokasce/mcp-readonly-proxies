@@ -56,8 +56,8 @@ flowchart LR
     GTS[("encrypted token store<br/>(per user)")]
   end
 
-  subgraph PP["payhawk-ro proxy (same image, other config)"]
-    PPC["policy core"]
+  subgraph PP["payhawk-ro proxy"]
+    PPC["policy core<br/>(same image, other config)"]
   end
 
   CW -- "Streamable HTTP + OAuth 2.1" --> GPC
@@ -66,7 +66,7 @@ flowchart LR
   GPC --- GTS
   GPC -- "per-user gmail.readonly token" --> GAPI["Gmail API"]
 
-  PPC -- "per-user Payhawk OAuth token" --> PMCP["https://mcp.payhawk.com/mcp"]
+  PPC -- "per-user Payhawk OAuth token" --> PMCP["Payhawk MCP<br/>mcp.payhawk.com/mcp"]
 ```
 
 ## Transport and hosting
@@ -224,6 +224,10 @@ The per-role runbooks: [Google Workspace admin](runbooks/google-workspace-admin.
 | **Cloudflare MCP server portals** (managed; docs updated 2026-11-05) | Portal behind Cloudflare Access; users sign in through your IdP. Per-tool on/off, and an **allowlist mode via API** (`default_disabled: true` + `updated_tools`); otherwise "new tools and prompts are automatically enabled". Per-user upstream OAuth with **your own OAuth client and an explicit Scope field** ("Require user auth"). Access request logs; optional Gateway HTTP logs and DLP. Claude Desktop/claude.ai setup documented (redirect `https://claude.ai/api/mcp/auth_callback`) ([MCP portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/)) | **Best "buy" candidate.** Limits: it only fronts MCP servers, so Gmail would sit behind Google's Developer Preview Gmail MCP; no documented pinning of tool definitions (an allowlisted name whose schema changes stays exposed); nexos would need Access OAuth or a shared service token; Payhawk still needs its redirect allowlist to include Cloudflare's callback; adds Cloudflare to the data path; Zero Trust plan cost not checked |
 | **Docker MCP Gateway** | `docker mcp gateway run --tools ...` filtering; geared to local / stdio use ([docs](https://docs.docker.com/reference/cli/docker/mcp/gateway/run/)) | Not a multi-user remote OAuth service |
 | Commercial (Composio, Arcade, MintMCP, Portkey, ...) | Hosted tool catalogs and gateways | Not verified here; puts a third party in the Gmail data path |
+
+![Turned-off tools are hidden and cannot be called; allowlist pattern](images/cloudflare-portal-allowlist.png)
+
+*Source: [Cloudflare docs, MCP server portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/), captured 2026-11-08. Yellow highlight added.*
 
 **Build vs buy:** the research recommends building on FastMCP over a Cloudflare portal, for four reasons:
 

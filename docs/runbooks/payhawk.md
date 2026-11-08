@@ -2,6 +2,8 @@
 
 For Claude Owners and Payhawk admins. Background: [findings.md](../findings.md#65-payhawk-mcp). Sources checked on 2026-11-08: Payhawk Help Center [About](https://payhawk.com/help/payhawk-mcp-overview.md) (2026-10-28), [Connecting](https://payhawk.com/help/connecting-payhawk-mcp.md), [Tool reference](https://payhawk.com/help/payhawk-mcp-tool-reference.md) (2026-09-15), [FAQ](https://payhawk.com/help/faq-on-the-payhawk-mcp.md), [Troubleshooting](https://payhawk.com/help/troubleshooting-the-payhawk-mcp.md), [Developer API](https://payhawk.com/help/overview-of-the-payhawk-developer-api.md).
 
+> **Screenshots:** the Payhawk Help Center has no screenshots of the connection or admin screens, and we have no Payhawk admin access, so the steps are text only. The images below show the cited help-page text.
+
 ## Key facts
 
 - **Official, hosted by Payhawk:** `https://mcp.payhawk.com/mcp` (Streamable HTTP). Not in app directories; added manually.
@@ -9,6 +11,18 @@ For Claude Owners and Payhawk admins. Background: [findings.md](../findings.md#6
 - **Client allowlist:** "Payhawk accepts sign-ins only from the AI Assistants in the table. In any other app, the sign-in fails with an error that mentions `host-not-allowed` or 'The client redirect URI is not allowed.'" Supported: Claude, Claude Code, ChatGPT, Codex CLI, Cursor, GitHub Copilot app and VS Code, Microsoft Copilot Studio, M365 Copilot, Langdock, Notion, Dust. **nexos.ai is not on the list.** Requests for other apps go to support@payhawk.com.
 - **Write safety on Payhawk's side:** "Write tools ... always show a preview and need your confirmation". It "never starts a payment or a transfer". This is a user-confirmation gate (advisory), not a read-only mode.
 - **Developer API:** keys are **Full access** or **Read-only access** (Settings > Integrations > API). A key is account-wide, not per user, and rate limited to 15 requests/s.
+
+![Payhawk accepts sign-ins only from the listed AI apps; nexos.ai is not listed](../images/payhawk-supported-clients.png)
+
+*Source: [Payhawk Help Center, Connecting Payhawk to your AI Assistant](https://payhawk.com/help/connecting-payhawk-mcp.md), captured 2026-11-08. Yellow highlight added.*
+
+![Read tools never change anything; write tools need confirmation](../images/payhawk-read-write-tools.png)
+
+*Source: [Payhawk Help Center, Payhawk MCP tool reference](https://payhawk.com/help/payhawk-mcp-tool-reference.md), captured 2026-11-08. Yellow highlight added.*
+
+![The Payhawk MCP never starts a payment or transfer](../images/payhawk-no-money-movement.png)
+
+*Source: [Payhawk Help Center, About the Payhawk MCP](https://payhawk.com/help/payhawk-mcp-overview.md), captured 2026-11-08. Yellow highlight added.*
 
 ## Options
 

@@ -7,6 +7,7 @@ All sources were checked on **2026-11-08** unless a row says otherwise.
 - "nexos" is **nexos.ai** (confirmed from docs.nexos.ai, see [nexos.ai](#5-nexosai)).
 - Surfaces in use: **Claude web/desktop and Claude Code**. Claude API / Agent SDK are covered only briefly.
 - Preference: use the **built-in Gmail connector** if it can be restricted; otherwise a **custom read-only proxy MCP**, assuming several proxies over time (Gmail, **Payhawk**, later others).
+- Claude plan: believed to be **Team** (from the onboarding email), pending confirmation. Where Team and Enterprise differ, both are covered.
 - The team does **not** control the Google Workspace admin console itself, but colleagues who do can help. Every step that needs a Google Workspace admin is tagged **[GWA]** (consolidated in [the Workspace admin runbook](runbooks/google-workspace-admin.md)).
 
 Evidence labels used throughout:
@@ -68,6 +69,14 @@ The full comparison table (19 solutions, with enforcement level, bypassability, 
 - The page [claude.com/docs/connectors/google/gmail](https://claude.com/docs/connectors/google/gmail.md) still says: "Claude reads and searches email only; it can't create, send, or modify messages."
 - The two Anthropic pages contradict each other. The help article plus the community evidence below point to the read-only docs page being stale. Treat the connector as **able to write**.
 
+![The help article lists send, reply, forward and label management for Gmail](images/anthropic-gmail-capabilities.png)
+
+*Source: [Anthropic Help Center, Use Google Workspace connectors](https://support.claude.com/en/articles/10166901-use-google-workspace-connectors), captured 2026-11-08. Yellow highlight added.*
+
+![The Claude docs page still says the connector is read-only](images/claude-docs-gmail-readonly-claim.png)
+
+*Source: [Claude docs, Gmail connector](https://claude.com/docs/connectors/google/gmail.md), captured 2026-11-08. Yellow highlight added.*
+
 **Community-observed tool names** (Anthropic publishes no tool list; GitHub issues on `anthropics/claude-code`):
 
 | Source | Tools seen (`mcp__claude_ai_Gmail__*`) |
@@ -85,6 +94,10 @@ The tool list could not be captured live during the research: an unauthenticated
 - **How to confirm for your own tenant [GWA]:** Admin console > Security > Access and data control > API controls > Manage Third-Party App Access > **Accessed apps** > "Claude for Gmail" shows "the OAuth scopes that each app is requesting" ([Google doc](https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data)). Note the scopes before deciding anything.
 - **Can an admin narrow it?** No Claude setting exists. Enterprise-managed auth has a "Scopes" step, but Gmail is not on its supported connector list ([Auto-connect your organization's apps](https://support.claude.com/en/articles/15537633-auto-connect-your-organization-s-apps-to-claude)). Verified as of 2026-11-08.
 
+![Google's OAuth screen mentions email sending permissions](images/anthropic-gmail-oauth-note.png)
+
+*Source: [Anthropic Help Center, Use Google Workspace connectors](https://support.claude.com/en/articles/10166901-use-google-workspace-connectors), captured 2026-11-08. Yellow highlight added.*
+
 ### 3.3 Per-tool admin controls, Team vs Enterprise
 
 | Control | Team | Enterprise | Notes |
@@ -95,17 +108,33 @@ The tool list could not be captured live during the research: an unauthenticated
 | Restrict verified-domain connectors (stop personal Claude accounts connecting work Gmail) | No | **Yes** | Gmail is on the supported list; not retroactive; fails open when identity can't be checked ([15402193](https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise)) |
 | Member connector requests | On by default | Off by default | An Owner can "Decline it and block the connector" ([11176164](https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities)) |
 
+![Owners can set connector tools to Always allow, Needs approval or Blocked, org-wide](images/anthropic-tool-permissions.png)
+
+*Source: [Anthropic Help Center, Use connectors to extend Claude's capabilities](https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities), captured 2026-11-08. Yellow highlight added.*
+
+![Verified-domain restriction keeps work Gmail away from personal Claude accounts](images/anthropic-verified-domain.png)
+
+*Source: [Anthropic Help Center, Restrict verified-domain connectors to your Enterprise](https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise), captured 2026-11-08. Yellow highlight added.*
+
 **Where the tool policy is enforced** (Verified, [13930452](https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans) "Where connector permissions apply"):
 
 - "Connector permissions are enforced on Anthropic's servers." Coverage: web and desktop full; mobile "calls to them are rejected"; Cowork same as web; Claude Code "Blocked tools are rejected and appear as disabled".
 - "Access fails toward denying, never toward granting."
 - They **don't** cover locally run connectors, or Cowork on third-party platforms.
 
+![Where connector permissions are enforced](images/anthropic-connector-permissions-where.png)
+
+*Source: [Anthropic Help Center, Manage custom roles on Enterprise plans](https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans), captured 2026-11-08. Yellow highlight added.*
+
 In Claude Code ([mcp.md](https://code.claude.com/docs/en/mcp.md#organization-controls-on-connector-tools)):
 
 - A `blocked` tool is filtered out before Claude sees it.
 - The Desktop app's local and SSH sessions also withhold `blocked` tools.
 - An org `ask` is **not** delivered there, so in those sessions only `blocked` is reliable.
+
+![How Claude Code applies the org's blocked and ask settings](images/claude-code-org-connector-controls.png)
+
+*Source: [Claude Code docs, MCP](https://code.claude.com/docs/en/mcp.md#organization-controls-on-connector-tools), captured 2026-11-08. Yellow highlight added.*
 
 **Caveats that shape the setting you choose:**
 
@@ -166,6 +195,10 @@ Controls, all **Verified** from code.claude.com:
 | Disable claude.ai connectors | `disableClaudeAiConnectors: true` (any source set to true wins) | Fetched connectors only |
 | Delivery | Server-managed (Team and Enterprise Owners; fetched at startup, refreshed hourly) or endpoint-managed (MDM, registry, `managed-settings.json`) | "Endpoint-managed settings provide stronger security guarantees" ([server-managed-settings.md](https://code.claude.com/docs/en/server-managed-settings.md)) |
 
+![A serverName entry is not a security control](images/claude-code-servername-warning.png)
+
+*Source: [Claude Code docs, Managed MCP configuration](https://code.claude.com/docs/en/managed-mcp.md), captured 2026-11-08. Yellow highlight added.*
+
 **Known gap (Community):** in Claude Desktop's Code tab, local sessions mount claude.ai connectors under connection UUIDs (`mcp__<uuid>__send_message`). Rules written as `mcp__claude_ai_Gmail__*` silently don't match there ([#92787](https://github.com/anthropics/claude-code/issues/92787), open). A server-segment glob such as `mcp__*__send_message` reportedly works but loses per-connector precision. **The org `blocked` policy is the reliable control for Desktop sessions.**
 
 Example managed settings and deployment steps are in [runbooks/claude-code-managed-settings.md](runbooks/claude-code-managed-settings.md).
@@ -201,6 +234,38 @@ Example managed settings and deployment steps are in [runbooks/claude-code-manag
 | Custom MCP | Management > Apps > Add custom MCP. **Streamable HTTP only, internet-reachable.** Auth: "API keys, credentials ... Each user will be able to provide their own API key individually". Org-level: "all teams and members in your workspace can use them once enabled". IP allowlisting on request ([Custom MCP](https://docs.nexos.ai/workspace/integrations/custom-mcp.md)) | Verified. OAuth for custom MCP not documented |
 | Plans | Billing shows "1-month plan, 12-month plan, or Enterprise" ([Billing](https://docs.nexos.ai/workspace/settings/organization/billing.md)). Public pricing (nexos.ai/pricing) is behind a Cloudflare bot check and was not readable. Third-party summaries mention self-serve per seat and custom Enterprise | Docs verified; plan feature matrix not verified. No doc ties integration controls to a plan |
 
+![nexos integrations are Active or Inactive](images/nexos-integrations-status.png)
+
+*Source: [nexos.ai docs, Workspace Integrations](https://docs.nexos.ai/workspace/integrations.md), captured 2026-11-08. Yellow highlight added.*
+
+![Custom MCP auth is per-user API keys](images/nexos-custom-mcp-auth.png)
+
+*Source: [nexos.ai docs, Custom MCP](https://docs.nexos.ai/workspace/integrations/custom-mcp.md), captured 2026-11-08. Yellow highlight added.*
+
+![nexos supports only streamable HTTP; IP allowlisting on request](images/nexos-custom-mcp-streamable.png)
+
+*Source: [nexos.ai docs, Custom MCP](https://docs.nexos.ai/workspace/integrations/custom-mcp.md), captured 2026-11-08. Yellow highlight added.*
+
+![Users can pick Always approve](images/nexos-hitl-always-approve.png)
+
+*Source: [nexos.ai docs, Human-in-the-Loop approvals](https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals.md), captured 2026-11-08. Yellow highlight added.*
+
+![Read-only actions continue without approval](images/nexos-hitl-readonly.png)
+
+*Source: [nexos.ai docs, Human-in-the-Loop approvals](https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals.md), captured 2026-11-08. Yellow highlight added.*
+
+![nexos.ai's own screen recording: an integration switched from Inactive to Active](images/nexos-ui-integration-status.png)
+
+*Source: [nexos.ai docs, Workspace Integrations](https://docs.nexos.ai/workspace/integrations.md), frames from nexos.ai's own screen recording, captured 2026-11-08. Labels added.*
+
+![nexos.ai's own image of an approval card with Decline, Always approve and Approve](images/nexos-ui-approval-card.png)
+
+*Source: [nexos.ai docs, Human-in-the-Loop approvals](https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals.md), nexos.ai's own image, captured 2026-11-08.*
+
+![nexos.ai's own screen recording: the per-integration "Require my approval before taking each action" toggle in agent settings](images/nexos-ui-hitl-toggle.png)
+
+*Source: [nexos.ai docs, Human-in-the-Loop approvals](https://docs.nexos.ai/workspace/agents/human-in-the-loop-hitl-approvals.md), frame from nexos.ai's own screen recording, captured 2026-11-08.*
+
 **What works in nexos:** keep the built-in Gmail integration **Inactive**. Add the read-only proxy as a custom MCP. Because nexos custom MCP auth is per-user API keys, the proxy needs a personal-key mode ([proxy design](proxy-design.md#how-users-authenticate-to-the-proxy)).
 
 The Google layer also applies to nexos [GWA]: find nexos's Gmail OAuth app under Accessed apps, check its scopes, and set it to Blocked (or Specific Google data) so a member can't get write access to Gmail through nexos.
@@ -225,6 +290,10 @@ From [Gmail API scopes](https://developers.google.com/workspace/gmail/api/auth/s
 | `gmail.modify` | Read, compose, and send emails from your Gmail account (no permanent delete) | Restricted |
 | `https://mail.google.com/` | Read, compose, send, and permanently delete all your email | Restricted |
 
+![gmail.readonly views mail; gmail.compose manages drafts and sends](images/google-gmail-restricted-scopes.png)
+
+*Source: [Google for Developers, Choose Gmail API scopes](https://developers.google.com/workspace/gmail/api/auth/scopes), captured 2026-11-08. Yellow highlight added.*
+
 A token holding only `gmail.readonly` (plus `openid email`) cannot send, draft, label or delete. **Google enforces this regardless of the client.**
 
 `gmail.readonly` is a restricted scope. External apps need Google verification. An **Internal** app (a GCP project owned by your Workspace org, consent screen set to Internal) is exempt: "Internal Use apps: The app is only used by people in your Google Workspace or Cloud Identity organization" ([verification exceptions](https://support.google.com/cloud/answer/13464323)).
@@ -234,13 +303,28 @@ A token holding only `gmail.readonly` (plus `openid email`) cannot send, draft, 
 From [Control which apps access Google Workspace data](https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data). Requires the Service Settings administrator privilege.
 
 - **Path:** Admin console > Security > Access and data control > **API controls** > Manage App Access.
+
+![Where API controls live in the Admin console (Google's own illustration)](images/google-api-controls-nav.png)
+
+*Source: [Google Workspace Admin Help, Control which apps access Google Workspace data](https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data), captured 2026-11-08. Yellow highlight added.*
+
 - **Per-app levels:**
   - Trusted: all services.
   - Limited: unrestricted services only.
   - **Specific Google data**: "Can request data access only to scopes that you specify". You must include the Sign-in scopes.
   - **Blocked**: no Google data.
   - Settings can differ per organizational unit.
+
+![Per-app access levels, including Specific Google data and Blocked](images/google-app-access-levels.png)
+
+*Source: [Google Workspace Admin Help, Control which apps access Google Workspace data](https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data), captured 2026-11-08. Yellow highlight added.*
+
 - **Restricted services:** setting Gmail to Restricted means only Trusted or Specific Google data apps can access it. "If you change access to Restricted, any previously installed apps that you haven't trusted stop working, and tokens are revoked." This has a large blast radius; coordinate first.
+
+![Setting a service to Restricted revokes tokens of untrusted apps](images/google-restricted-services.png)
+
+*Source: [Google Workspace Admin Help, Control which apps access Google Workspace data](https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data), captured 2026-11-08. Yellow highlight added.*
+
 - **High-risk Gmail scopes** can be restricted separately. The list includes `gmail.compose`, `gmail.send`, `gmail.modify`, `gmail.readonly` and `mail.google.com`.
 - **Unconfigured third-party apps:** allow all (default), allow only basic Sign-in-with-Google apps, or don't allow any. Internal apps are trusted only if "Trust internal apps" is checked. Leave it unchecked so only explicitly configured clients reach Gmail.
 - **Visibility:** "Accessed apps" lists apps that hold tokens and their requested scopes. Use it to audit Claude, nexos and the proxy.
@@ -257,6 +341,10 @@ From [Configure the Gmail MCP server](https://developers.google.com/workspace/gm
   - An OAuth client marked "**Use this client for an AI-powered agent**".
 - **Claude setup (Google's instructions):** Web OAuth client with redirect `https://claude.ai/api/mcp/auth_callback`. Then in Claude: Admin settings > Connectors > Add custom connector, URL `https://gmailmcp.googleapis.com/mcp/v1`, client ID and secret under Advanced.
 - **Scopes:** Google's guide configures `gmail.readonly` + `gmail.compose`.
+
+![Google's Gmail MCP guide configures gmail.readonly and gmail.compose](images/google-gmail-mcp-scopes.png)
+
+*Source: [Google for Developers, Configure the Gmail MCP server](https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server), captured 2026-11-08. Yellow highlight added.*
 
 Per-tool annotations and scopes, as published by Google (one page per tool):
 
@@ -295,7 +383,21 @@ From Payhawk Help Center: [About](https://payhawk.com/help/payhawk-mcp-overview.
 - **Official and hosted by Payhawk:** `https://mcp.payhawk.com/mcp` (Streamable HTTP). Not in app directories; added manually.
 - **Auth:** OAuth with the user's own Payhawk login. Dynamic registration works ("Register automatically" in Claude). Sessions last until 7 days unused, 30 days at most. The AI "sees exactly what you see in Payhawk", so Payhawk roles still apply.
 - **Client allowlist:** "**Payhawk accepts sign-ins only from the AI Assistants in the table**. In any other app, the sign-in fails with an error that mentions `host-not-allowed` or 'The client redirect URI is not allowed.'" The supported list: Claude, Claude Code, ChatGPT, Codex CLI, Cursor, GitHub Copilot app and VS Code, Microsoft Copilot Studio, M365 Copilot, Langdock, Notion, Dust. **nexos.ai is not on the list.** Requests for other apps go to support@payhawk.com.
+
+![Payhawk accepts sign-ins only from the listed AI apps; nexos.ai is not listed](images/payhawk-supported-clients.png)
+
+*Source: [Payhawk Help Center, Connecting Payhawk to your AI Assistant](https://payhawk.com/help/connecting-payhawk-mcp.md), captured 2026-11-08. Yellow highlight added.*
+
 - **Write safety on Payhawk's side:** "Write tools ... always show a preview and need your confirmation". It "never starts a payment or a transfer". This is a user-confirmation gate (advisory), not a read-only mode.
+
+![Read tools never change anything; write tools need confirmation](images/payhawk-read-write-tools.png)
+
+*Source: [Payhawk Help Center, Payhawk MCP tool reference](https://payhawk.com/help/payhawk-mcp-tool-reference.md), captured 2026-11-08. Yellow highlight added.*
+
+![The Payhawk MCP never starts a payment or transfer](images/payhawk-no-money-movement.png)
+
+*Source: [Payhawk Help Center, About the Payhawk MCP](https://payhawk.com/help/payhawk-mcp-overview.md), captured 2026-11-08. Yellow highlight added.*
+
 - **Claude Team and Enterprise:** "only a Claude Owner can add a custom connector". The Owner adds `https://mcp.payhawk.com/mcp` under Organization settings > Connectors, then members connect individually. **The Claude org tool policy can then Block Payhawk's write tools** ([section 4.1](#41-claudeai-web-desktop-chat-and-mobile-team-and-enterprise)), which covers Claude without any proxy.
 - **Developer API:** keys are created as **Full access** or **Read-only access** (Settings > Integrations > API). A key is account-wide, not per user, and is rate limited to 15 requests/s.
 
@@ -359,6 +461,8 @@ Team vs Enterprise differences:
 
 - Enterprise adds custom roles, the verified-domain restriction, and Desktop policy from Organization settings.
 - On Team, the personal-account gap is closed **only** by the Google admin blocking "Claude for Gmail".
+
+> **Team-plan gap:** on Team there is no verified-domain restriction, so a member's personal Claude account can connect work Gmail outside the org policy. Closing that requires the Google Workspace admin to block "Claude for Gmail" at Google [GWA], with Gmail then reached only through the read-only proxy added by an Owner as a custom connector. Our plan is believed to be Team, pending confirmation.
 
 ### 8.2 Lighter option: built-in connector, Anthropic-enforced read-only
 

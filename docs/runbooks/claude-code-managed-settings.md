@@ -2,6 +2,8 @@
 
 For IT and Claude Owners. Locks Claude Code to approved MCP servers and denies Gmail write tools, independently of the claude.ai org tool policy. Background: [findings.md](../findings.md#42-claude-code). All facts and examples are from the cited Claude Code docs, checked on 2026-11-08.
 
+> **Screenshots:** these are configuration files, so there is no console to show. The images below show the cited Claude Code docs text.
+
 ## Which sessions each delivery method reaches
 
 Claude Code gets claude.ai connectors and **server-managed settings** only when it is signed in with a Team or Enterprise claude.ai login. Sessions on `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `apiKeyHelper` or a third-party provider get neither ([mcp.md](https://code.claude.com/docs/en/mcp.md#use-mcp-servers-from-claude-ai), [server-managed-settings.md](https://code.claude.com/docs/en/server-managed-settings.md)). That includes Claude Code run through the nexos.ai gateway (`ANTHROPIC_BASE_URL=https://api.nexos.ai` + `ANTHROPIC_AUTH_TOKEN`, [nexos Claude Code integration](https://docs.nexos.ai/gateway-api/integrations/claude-code.md)).
@@ -39,6 +41,14 @@ File locations for `managed-settings.json` ([managed-settings.md](https://code.c
 | Pin OAuth scopes for user-added servers | `"oauth": { "scopes": "https://www.googleapis.com/auth/gmail.readonly" }` | Overrides scopes the server advertises ([mcp.md](https://code.claude.com/docs/en/mcp.md#restrict-oauth-scopes)) |
 | Hooks | A `PreToolUse` hook can deny any call; deny rules hold even if a hook says allow; `allowManagedHooksOnly` restricts hooks to managed ones | [permissions.md](https://code.claude.com/docs/en/permissions.md#extend-permissions-with-hooks) |
 | Disable claude.ai connectors | `disableClaudeAiConnectors: true` (any source set to true wins) | Fetched connectors only |
+
+![How Claude Code applies the org's blocked and ask settings](../images/claude-code-org-connector-controls.png)
+
+*Source: [Claude Code docs, MCP](https://code.claude.com/docs/en/mcp.md#organization-controls-on-connector-tools), captured 2026-11-08. Yellow highlight added.*
+
+![A serverName entry is not a security control](../images/claude-code-servername-warning.png)
+
+*Source: [Claude Code docs, Managed MCP configuration](https://code.claude.com/docs/en/managed-mcp.md), captured 2026-11-08. Yellow highlight added.*
 
 ## Example: proxy route
 

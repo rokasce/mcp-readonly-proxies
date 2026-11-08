@@ -10,6 +10,10 @@ All sources were checked on **2026-11-08**.
 
 On both Claude **Team** and **Enterprise**, the built-in Gmail connector can be made read-only for the whole org: an Owner sets its write tools (or the whole write/delete group) to **Blocked**, Anthropic enforces this on its servers across claude.ai web, Desktop, mobile and Claude Code, and members cannot override it. But this is **not a read-only credential**: the connector's Google grant still holds send permission (`gmail.compose`), so the guarantee lives entirely in Anthropic's policy layer. A **credential-level guarantee** needs an OAuth token that holds only `gmail.readonly`, which you can only get with an **OAuth client you own** (Google's own Gmail MCP server, or your own read-only proxy), with a Google Workspace admin blocking Anthropic's "Claude for Gmail" app. **nexos.ai** has only whole-integration Active / Inactive; the only enforced read-only Gmail there is a read-only MCP server added as a custom MCP. Payhawk's official MCP can be write-blocked in Claude by the same org tool policy; a self-hosted Payhawk proxy needs Payhawk Support to allowlist its redirect URI.
 
+**Our plan:** believed to be **Claude Team** (from the onboarding email), pending confirmation (see [stakeholder question 1](docs/questions-for-stakeholders.md#claude-admins-owners)).
+
+**Team-plan gap:** on Team there is no verified-domain restriction, so a member's personal Claude account can connect work Gmail outside the org policy. Closing that requires the Google Workspace admin to block "Claude for Gmail" at Google [GWA] ([runbook](docs/runbooks/google-workspace-admin.md#2-set-the-access-level-for-claude-for-gmail)), with Gmail then reached only through the read-only proxy added by an Owner as a custom connector.
+
 ## Comparison of solutions
 
 "Enforced" means a technical control rejects the action. "Advisory" means it relies on a person clicking correctly, or on a hint. "Bypassable" means a normal member can get around it.
@@ -45,11 +49,20 @@ On both Claude **Team** and **Enterprise**, the built-in Gmail connector can be 
 | [docs/findings.md](docs/findings.md) | Full research findings with references and evidence labels | Anyone deciding |
 | [docs/proxy-design.md](docs/proxy-design.md) | Proposed design for a generic default-deny allowlisting proxy (Gmail, Payhawk) | Engineers; pending decisions |
 | [docs/open-questions.md](docs/open-questions.md) | Decisions that would change the recommendation | Decision makers |
+| [docs/questions-for-stakeholders.md](docs/questions-for-stakeholders.md) | Questions to ask each admin group before rollout, linked to the relevant sections | Everyone involved |
 | [docs/runbooks/google-workspace-admin.md](docs/runbooks/google-workspace-admin.md) | Every step that needs a Google Workspace admin | Workspace admins |
 | [docs/runbooks/claude-org.md](docs/runbooks/claude-org.md) | Claude Owner steps on Team and Enterprise | Claude Owners |
 | [docs/runbooks/claude-code-managed-settings.md](docs/runbooks/claude-code-managed-settings.md) | Claude Code managed MCP allowlist / denylist, deny rules, hooks | IT, Claude Owners |
 | [docs/runbooks/nexos.md](docs/runbooks/nexos.md) | nexos.ai Owner steps | nexos Owners |
 | [docs/runbooks/payhawk.md](docs/runbooks/payhawk.md) | Payhawk MCP options, tool classification, Support request | Claude Owners, finance admins |
+
+## Reading view
+
+[docs/site/index.html](docs/site/index.html) presents all of these documents on one page: a table of contents, a filterable and sortable comparison table, the screenshots, rendered diagrams, collapsible runbooks, light and dark mode, and a print layout. The Markdown files stay the source of truth; the HTML is generated from them.
+
+- **Open it locally:** clone the repo and open `docs/site/index.html` in a browser (double-click it, or `xdg-open docs/site/index.html` / `open docs/site/index.html`). It needs no server; it loads Mermaid from a CDN to draw the diagrams, so be online.
+- **Regenerate after editing the Markdown:** `uv run docs/site/build.py`.
+- It will also be shared as a hosted page.
 
 ## Evidence labels
 

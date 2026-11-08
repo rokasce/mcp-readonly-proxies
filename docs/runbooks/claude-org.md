@@ -2,6 +2,12 @@
 
 For Claude organization Owners. Covers the built-in Gmail connector's tool policy, custom connectors, the verified-domain restriction and custom roles. Background: [findings.md](../findings.md#3-can-the-built-in-gmail-connector-be-restricted-to-read-only). Sources checked on 2026-11-08.
 
+> **Screenshots:** the Anthropic help articles have no screenshots of Organization settings or the Tool permissions screen, and we have no Owner console access, so every step here is text only. The images below show the help-article text each step relies on.
+
+Our plan is believed to be **Team** (from the onboarding email), pending confirmation.
+
+**Team-plan gap:** on Team there is no verified-domain restriction, so a member's personal Claude account can connect work Gmail outside the org policy. Closing that requires the Google Workspace admin to block "Claude for Gmail" at Google [GWA] ([google-workspace-admin.md](google-workspace-admin.md#2-set-the-access-level-for-claude-for-gmail)), with Gmail then reached only through the read-only proxy added by an Owner as a custom connector.
+
 ## What the controls do
 
 | Control | Team | Enterprise | Notes |
@@ -13,7 +19,19 @@ For Claude organization Owners. Covers the built-in Gmail connector's tool polic
 | Member connector requests | On by default | Off by default | An Owner can "Decline it and block the connector" ([11176164](https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities)) |
 | Who can add custom connectors | Owners, Primary Owners | Owners, Primary Owners, custom roles with Libraries "Manage" | [11175166](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) |
 
+![Owners can set connector tools to Always allow, Needs approval or Blocked, org-wide](../images/anthropic-tool-permissions.png)
+
+*Source: [Anthropic Help Center, Use connectors to extend Claude's capabilities](https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities), captured 2026-11-08. Yellow highlight added.*
+
+![Verified-domain restriction keeps work Gmail away from personal Claude accounts](../images/anthropic-verified-domain.png)
+
+*Source: [Anthropic Help Center, Restrict verified-domain connectors to your Enterprise](https://support.claude.com/en/articles/15402193-restrict-verified-domain-connectors-to-your-enterprise), captured 2026-11-08. Yellow highlight added.*
+
 **Where the tool policy is enforced** (Verified, [13930452](https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans)): "Connector permissions are enforced on Anthropic's servers." Web and desktop full; mobile "calls to them are rejected"; Cowork same as web; Claude Code "Blocked tools are rejected and appear as disabled". "Access fails toward denying, never toward granting." Not covered: locally run connectors, Cowork on third-party platforms.
+
+![Where connector permissions are enforced](../images/anthropic-connector-permissions-where.png)
+
+*Source: [Anthropic Help Center, Manage custom roles on Enterprise plans](https://support.claude.com/en/articles/13930452-manage-custom-roles-on-enterprise-plans), captured 2026-11-08. Yellow highlight added.*
 
 **Always use Blocked, not Needs approval, for write tools:**
 
